@@ -55,12 +55,15 @@ changed, is restored on leaving."
              :documentation "The position in the stream at which the
              data lie.")
    (parser :initform nil :initarg :parser :reader parser-of
-           :documentation "The parser function for the data."))
+           :documentation "The parser function for the data.")
+   (immediate :initform nil :initarg :immediate :reader immediate-value-p))
   (:documentation "An Illumina Genotype Call file table of contents
   entry."))
 
 (defmethod initialize-instance :after ((gtc gtc) &key)
-  (with-slots (stream buffer version toc) gtc
+  (with-slots (stream buffer version toc)
+      gtc
+    (read-magic stream buffer)
     (setf version (read-version stream buffer)
           toc (read-toc stream buffer))))
 
@@ -94,7 +97,7 @@ Returns:
 - Data value (type depends on data)")
   (:method ((gtc gtc) (name symbol))
     (let ((toc-entry (find name (toc-of gtc) :key #'name-of)))
-      (check-arguments toc-entry (name) "is not GTC data field")
+      (check-arguments toc-entry (name) "is not a GTC data field")
       (read-data-field gtc toc-entry))))
 
 (defun read-gtc (stream)
@@ -142,9 +145,9 @@ alist XFORM."
   "Reads a single toc-entry from STREAM."
   (let* ((id (decode-uint16le (read-record stream buffer 2)))
          (position (decode-uint32le (read-record stream buffer 4))))
-    (destructuring-bind (name fname)
+    (destructuring-bind (name fname &optional immediate)
         (case id
-          (1 '(:num-snps read-uint32))
+          (1 '(:num-snps read-uint32 t))
           (10 '(:sample-name read-string))
           (11 '(:sample-plate read-string))
           (12 '(:sample-well read-string))
@@ -165,16 +168,18 @@ alist XFORM."
           (otherwise '(:unknown nil)))
       (make-instance 'toc-entry :name name
                      :parser (and fname (symbol-function fname))
-                     :position position))))
+                     :position position :immediate immediate))))
 
 (defun read-data-field (gtc toc-entry)
   "Returns a parsed data element denoted by TOC-ENTRY in the GTC toc."
   (with-slots (stream buffer)
       gtc
-    (let ((fn (parser-of toc-entry)))
-      (with-restored-position stream
-        (file-position stream (position-of toc-entry))
-        (funcall fn stream buffer)))))
+    (if (immediate-value-p toc-entry)
+        (position-of toc-entry)
+        (let ((fn (parser-of toc-entry)))
+          (with-restored-position stream
+            (file-position stream (position-of toc-entry))
+            (funcall fn stream buffer))))))
 
 (defun read-intensities (stream buffer)
   "Reads intensities from STREAM as a vector of uint16."

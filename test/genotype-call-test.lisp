@@ -34,3 +34,18 @@
       (ensure (equal chrs (chromosomes-of manifest)))
       (ensure (equal counts (mapcar (lambda (chr)
                                       (num-snps-of manifest chr)) chrs))))))
+
+(addtest (genotype-call-tests) read-gtc/1
+  (with-open-file (stream (merge-pathnames "data/example.gtc")
+                          :element-type 'octet)
+    (let ((gtc (read-gtc stream)))
+      (ensure (= 3 (version-of gtc)))
+      (ensure (= 24 (length (toc-of gtc)))))))
+
+(addtest (genotype-call-tests) read-data-field/1
+  (with-open-file (stream (merge-pathnames "data/example.gtc")
+                          :element-type 'octet)
+    (let ((gtc (read-gtc stream)))
+      (ensure (= 660447 (data-field-of gtc :num-snps)))
+      (ensure (string= "test_sample" (data-field-of gtc :sample-name)))
+      (ensure (string= "test_plate_01" (data-field-of gtc :sample-plate))))))
