@@ -1,0 +1,166 @@
+latex input: mmd-article-header
+Title: Genotype Call File Format
+Author:  Keith James
+Date:    December 16, 2011
+Comment: A description of Illumina's binary Genotype Call file format.
+Base Header Level: 2
+latex input: mmd-article-begin-doc
+latex footer: mmd-memoir-footer
+
+# Introduction #
+
+Genotype Call (GTC) files are created by Illumina's AutoCall
+software under the management of the Illumina LIMS. They contain raw
+intensity measurements for each of the two colour channels of the
+assay, transforms necessary for intensity normalization, genotype
+calls, basecalls and genotype scores. Additionally, they contain
+various metadata on the sample identity and scanning conditions.
+
+GTC files alone do not contain sufficient information to normalize the
+raw intensities. The Beadpool Manifest describes which transform is to
+be applied to each SNP.
+
+
+# Structure #
+
+A GTC file consists of a header section followed by blocks of data,
+typically having one element per SNP. The header contains a magic
+string and a format version number followed by a table of
+contents. The table is composed of an arbitrary number of entries,
+each identifying the type and offset of a particular type block within
+the file.
+
+
+## Primitive types ##
+
+All GTC data are stored as one of the following primitive types, or
+a compound type derived from these.
+
+Data type   | Layout                       
+----------- | ----------------------------
+uint8/char  | 1 byte                        
+uint16      | 16-bit little-endian integer  
+uint32      | 32-bit little-endian integer  
+float32     | 32-bit little-endian float    
+[Primitive types]
+
+Arrays (including strings) are stored as a uint32 containing the array
+length, followed by that number of the appropriate primitives.
+
+
+## Header ##
+
+The header structure is as follows:
+
+Element                             | Data type      
+----------------------------------- | ---------------
+File type magic string              | char[3]        
+File version  (currently 3)         | uint8          
+Num TOC entries                     | uint32         
+TOC entry 0: Data key + File offset | uint16 + uint32
+TOC entry n-1                       | uint16 + uint32
+[GTC header]
+
+The TOC entries may appear in any order. Each points to one of the
+following types of data:
+
+Element                            | Data key | Data type  
+---------------------------------- | -------- | -----------
+Num SNPs (n)                       |        1 | uint32     
+Sample name                        |       10 | string     
+Sample plate                       |       11 | string     
+Sample well                        |       12 | string     
+Cluster filename                   |      100 | string     
+Beadpool manifest                  |      101 | string     
+Imaging date                       |      200 | string     
+AutoCall date                      |      201 | string     
+AutoCall version                   |      300 | string     
+Normalization transformations      |      400 | XForm[]    
+Raw control X (green) intensites   |      500 | uint16[n]  
+Raw control Y (red) intensities    |      501 | uint16[n]  
+Raw X (green) intensities          |     1000 | uint16[n]  
+Raw Y (red) intensities            |     1001 | uint16[n]  
+Genotypes (0=NC, 1=AA, 2=AB, 3=BB) |     1002 | uint8[n]   
+BaseCalls                          |     1003 | BaseCall[n]
+Genotype scores                    |     1004 | float32[n] 
+Scanner metadata                   |     1005 |            
+Scanner name                       |          | string     
+Pmt green                          |          | uint32     
+Pmt red                            |          | uint32     
+Scanner version                    |          | string     
+Scanner username                   |          | string     
+[GTC data types]
+
+
+## Body ##
+
+The body of the file is comprised of data blocks as indicated in the
+TOC. The data types are as follows:
+
+Data type   | Layout                   
+----------- | -------------------------
+BaseCall    | string[2]                
+XForm       | uint32 + 12 * float32    
+string[n]   | uint32 (n) + n * uint8   
+uint8[n]    | uint32 (n) + n * uint8   
+uint16[n]   | uint32 (n) + n * uint16  
+float32[n]  | uint32 (n) + n * float32 
+BaseCall[n] | uint32 (n) + n * BaseCall
+XForm[n]    | uint32 (n) + n * XForm   
+[GTC body]
+
+
+### BaseCalls ###
+
+A pair of characters representing the calls for the A and B
+alleles, respectively. Each character may be one of A, C, G, T or
+- if no call was made. The calls should be interpreted relative to the
+top strand.
+
+
+### XForms ###
+
+A set of values used to transform raw intensities into normalized
+intensities. A single XForm is laid out as follows:
+
+Data component | Layout 
+-------------- | -------
+version        | uint32 
+offset\_x      | float32
+offset\_y      | float32
+scale\_x       | float32
+scale\_y       | float32
+shear          | float32
+theta          | float32
+reserved       | float32
+reserved       | float32
+reserved       | float32
+reserved       | float32
+reserved       | float32
+reserved       | float32
+[GTC XForms]
+
+The algorithm to transform raw intensities to normalized
+intensities is as follows:
+
+        temp_x = x_raw - offset_x
+        temp_y = y_raw - offset_y
+        temp_x2 =  cos(theta) * temp_x + sin(theta) * temp_y
+        temp_y2 = -sin(theta) * temp_x + cos(theta) * temp_y
+        temp_x3 = temp_x2 - shear * temp_y2
+        temp_y3 = temp_y2
+        x_norm = temp_x3 / scale_x
+        y_norm = temp_y3 / scale_y
+
+Information from the Beadpool Manifest is required to determine which
+of the available XForms should be applied to a particular SNP's raw
+intensities. The NormID column of the manifest contains an integer
+value for each SNP.
+
+The set of unique NormIDs in a manifest does not necessarily form a
+consecutive sequence. However, the total number of unique NormIDs is
+equal to the number of XForms in GTC files which reference the
+manifest. It appears that the rank of a SNP's NormID in the sorted (in
+ascending order) set of unqiue NormIDs indicates the relevant XForm to
+use; the nth ranked NormID corresponds to the nth XForm in the vector
+of XForms in the GTC file.
