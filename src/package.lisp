@@ -23,7 +23,9 @@
   (:nicknames #:genotype-call)
   (:use #:common-lisp #:deoxybyte-utilities #:deoxybyte-io)
   (:export
-
+   
+   #:*xform-fields*
+   
    ;; BPM
    #:read-bpm
    #:alleles-of

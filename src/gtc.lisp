@@ -21,7 +21,14 @@
 
 (defvar *gtc-magic* (make-array 3 :element-type 'octet
                                 :initial-contents (mapcar #'char-code
-                                                          '(#\g #\t #\c))))
+                                                          '(#\g #\t #\c)))
+  "GTC file magic string.")
+
+(defvar *xform-fields* '(:offset-x :offset-y
+                         :scale-x :scale-y :shear :theta
+                         :reserved0 :reserved1 :reserved2
+                         :reserved3 :reserved4 :reserved5)
+  "The fields of a normalization XForm.")
 
 (defmacro with-restored-position (stream &body body)
   "Execute BODY, ensuring that the file position of STREAM, if
@@ -205,10 +212,7 @@ beadpool manifest."
             (setf (aref xforms i)
                   (mapcar (lambda (key)
                             (cons key (read-float stream buffer)))
-                          '(:offset-x :offset-y
-                            :scale-x :scale-y :shear :theta
-                            :reserved :reserved :reserved
-                            :reserved :reserved :reserved))))
+                          *xform-fields*)))
          finally (return xforms))))
 
 (defun read-genotypes (stream buffer)
