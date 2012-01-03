@@ -108,18 +108,22 @@ Returns:
       (read-data-field gtc toc-entry))))
 
 (defun read-gtc (stream)
+  "Returns a new GTC object read from STREAM."
   (check-arguments (streamp stream) (stream) "expected a stream argument")
   (make-instance 'gtc :stream stream))
 
 (defun normalize (x y xform)
   "Returns X and Y intensities as two values after normalization with
 alist XFORM."
+  (declare (optimize (speed 3)))
   (let ((offset-x (assocdr :offset-x xform))
         (offset-y (assocdr :offset-y xform))
         (scale-x (assocdr :scale-x xform))
         (scale-y (assocdr :scale-y xform))
         (shear (assocdr :shear xform))
         (theta (assocdr :theta xform)))
+    (declare (type uint16 x y)
+             (type single-float offset-x offset-y scale-x scale-y shear theta))
     (let* ((x1 (- x offset-x))
            (y1 (- y offset-y))
            (x2 (+ (* (cos theta) x1) (* (sin theta) y1)))

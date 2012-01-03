@@ -61,7 +61,7 @@
 
 (defgeneric chromosomes-of (manifest)
   (:documentation "Returns a sorted list of the chromosomes described
-  by MANFEST.")
+  by MANIFEST.")
   (:method ((manifest bpm))
     (with-slots (chr-index)
         manifest
@@ -95,6 +95,7 @@
     (aref (slot-value manifest 'names) index)))
 
 (defun read-bpm (stream)
+  "Returns a new BPM object from read STREAM."
   (check-arguments (streamp stream) (stream) "expected a stream argument")
   (let ((header (read-line stream t :eof)))
     (unless (starts-with-string-p header *bpm-header*)
@@ -123,8 +124,9 @@
                                    :initial-contents names)
                 :positions (make-array i :element-type 'fixnum
                                        :initial-contents posn)
-                :normalization (make-array i :element-type 'fixnum
-                                           :initial-contents norm))))
+                :normalization (rank-norm-ids
+                                (make-array i :element-type 'fixnum
+                                            :initial-contents norm)))))
         (do ((line (read-line stream nil :eof) (read-line stream nil :eof))
              (i 0 (1+ i)))
             ((eql :eof line) (make-bpm i))
@@ -159,7 +161,9 @@
 (defun rank-norm-ids (norm-ids)
   "Modifies vector NORM-IDS containing all NormIDs in the manifest,
 by substituting each NormID with its rank on the sorted set of all
-unique NormIDs."
+unique NormIDs. Ranks start from 0. The rank for each SNP is then an
+index into the vector of XForms within any GTC file and indicates
+which normalization parameters (XForm) is to be used for each SNP."
   (let* ((rank-order (sort (remove-duplicates norm-ids) #'<))
          (rank-map (make-hash-table :size (length rank-order))))
     (loop
