@@ -21,80 +21,74 @@
 
 (defvar *bpm-header*
   "Index,Name,Chromosome,Position,GenTrain Score,SNP,ILMN Strand,Customer Strand,NormID"
-  "The header expected in a Beapool Manifest CSV file.")
+  "The header expected in a Beadpool Manifest CSV file.")
 
 (defparameter *default-bpm-size* 100000
   "The default size (number of SNPs) per manifest assumed prior to
   parsing. Vectors created while parsing start at this size.")
 
+(defstruct (snp (:constructor make-snp (index name chromosome position
+                                        alleles ilmn-strand cust-strand
+                                        norm-id)))
+  "A representation of the data for a single SNP as stored in a
+Beadpool Manifest."
+  (index 0 :type fixnum)
+  (name "" :type simple-string)
+  (chromosome "" :type simple-string)
+  (position 0 :type fixnum)
+  (alleles "" :type simple-string)
+  (ilmn-strand #\- :type character)
+  (cust-strand #\- :type character)
+  (norm-id 0 :type fixnum)
+  (norm-rank 0 :type fixnum))
+
 (defclass bpm ()
   ((stream :initform nil :initarg :stream :reader stream-of
            :documentation "The manifest input stream.")
-   (name-index :initform (make-hash-table :test #'equal) :initarg :name-index
-               :documentation "A mapping of SNP name to SNP index.")
-   (chr-index :initform (make-hash-table :test #'equal) :initarg :chr-index
-              :documentation "A mapping of chromosome name to a list
-              of SNP indices for that chromosome.")
-   (names :initform (make-array 0) :initarg :names :reader names-of
-          :documentation "A vector of SNP names, in SNP order.")
-   (positions :initform (make-array 0) :initarg :positions :reader positions-of
-              :documentation "A vector of 1-based SNP chromosome
-              positions, in SNP order.")
-   (alleles :initform (make-array 0) :initarg :alleles :reader alleles-of)
-   (ilmn-strand :initform (make-array 0) :initarg :ilmn-strand
-                :reader ilmn-strand-of)
-   (cust-strand :initform (make-array 0) :initarg :cust-strand
-                :reader cust-strand-of)
-   (normalization :initform (make-array 0) :initarg :normalization
-                  :reader normalization-of))
-  (:documentation "An Illumina Beadpool Manifest. For convenience,
-  SNPs are indexed here starting from 0, rather than from 1 as in the
-  manifest file."))
+   (snps :initform (make-array 0) :initarg :snps)
+   (chromosomes :initform nil :initarg :chromosomes :reader chromosomes-of))
+  (:documentation "An Illumina Beadpool Manifest."))
+
+(defmethod initialize-instance :after ((manifest bpm) &key)
+  (with-slots (snps)
+      manifest
+    (setf snps (sort (rank-norm-ids snps) #'location<))))
 
 (defmethod print-object ((manifest bpm) stream)
   (print-unreadable-object (manifest stream :type t :identity nil)
-    (with-accessors ((s stream-of) (names names-of))
+    (with-slots ((s stream) snps)
         manifest
       (format stream "~@[~a, ~]~d SNPs"
               (when (subtypep (type-of s) 'file-stream)
-                (file-namestring s)) (length names)))))
+                (file-namestring s)) (length snps)))))
 
-(defgeneric chromosomes-of (manifest)
-  (:documentation "Returns a sorted list of the chromosomes described
-  by MANIFEST.")
-  (:method ((manifest bpm))
-    (with-slots (chr-index)
+(defgeneric snps-of (manifest &optional chromosome)
+  (:documentation "Returns the SNPs described by MANIFEST, optionally
+  restricting the count to only those SNPs on CHROMOSOME.")
+  (:method ((manifest bpm) &optional chromosome)
+    (with-slots (snps chromosomes)
         manifest
-      (loop
-         for chr being the hash-keys of chr-index
-         collect chr into chrs
-         finally (return (sort chrs #'string<))))))
+      (cond (chromosome
+             (check-arguments (member chromosome chromosomes :test #'string=)
+                              (chromosome)
+                              "invalid chromosome, expected one of ~a"
+                              chromosomes)
+             (loop
+                for snp across snps
+                when (string= chromosome (snp-chromosome snp))
+                count snp into n
+                and collect snp into subset
+                finally (return (make-array n :initial-contents subset))))
+            (t
+             snps)))))
 
 (defgeneric num-snps-of (manifest &optional chromosome)
   (:documentation "Returns the number of SNPs described by MANIFEST,
   optionally restricting the count to only those SNPs on CHROMOSOME.")
   (:method ((manifest bpm) &optional chromosome)
-    (with-slots (name-index chr-index)
-        manifest
-      (if chromosome
-          (with-accessors ((chromosomes chromosomes-of))
-              manifest
-            (check-arguments (member chromosome chromosomes :test #'string=)
-                             (chromosome)
-                             "invalid chromosome, expected one of ~a"
-                             chromosomes)
-            (length (gethash chromosome chr-index)))
-          (hash-table-count name-index)))))
+    (length (snps-of manifest chromosome))))
 
-(defgeneric find-snp (manifest identifier)
-  (:documentation "Returns a SNP name given a SNP index as IDENTIFIER,
-  or a SNP index given a SNP name as IDENTIFIER.")
-  (:method ((manifest bpm) (name string))
-    (gethash name (slot-value manifest 'name-index)))
-  (:method ((manifest bpm) (index fixnum))
-    (aref (slot-value manifest 'names) index)))
-
-(defun read-bpm (stream)
+(defun read-bpm (stream &key (strict-ordering t))
   "Returns a new BPM object from read STREAM."
   (check-arguments (streamp stream) (stream) "expected a stream argument")
   (let ((header (read-line stream t :eof)))
@@ -102,74 +96,101 @@
       (error 'malformed-file-error
              :format-control "invalid header: expected ~s, found ~s"
              :format-arguments (list *bpm-header* header)))
-    (let ((name-index (make-hash-table :test #'equal :size *default-bpm-size*))
-          (chr-index (make-hash-table :test #'equal))
-          (names (make-array *default-bpm-size* :element-type 'string
-                             :adjustable t :fill-pointer 0))
-          (posn (make-array *default-bpm-size* :element-type 'fixnum
-                            :adjustable t :fill-pointer 0))
-          (norm (make-array *default-bpm-size* :element-type 'fixnum
-                            :adjustable t :fill-pointer 0)))
-      (flet ((index-snp (rec i)
-               (setf (gethash (assocdr 'name rec) name-index) i))
-             (index-chr (rec i)
-               (let ((chr (assocdr 'chromosome rec)))
-                 (push i (gethash chr chr-index (list)))))
-             (store (rec key vector)
-               (vector-push-extend (assocdr key rec) vector) 1000)
-             (make-bpm (i)
+    (let ((snps (make-array *default-bpm-size* :adjustable t :fill-pointer 0))
+          (chromosomes (make-hash-table :test #'equal)))
+      (flet ((make-bpm ()
                (make-instance
-                'bpm :stream stream :name-index name-index :chr-index chr-index
-                :names (make-array i :element-type 'string
-                                   :initial-contents names)
-                :positions (make-array i :element-type 'fixnum
-                                       :initial-contents posn)
-                :normalization (rank-norm-ids
-                                (make-array i :element-type 'fixnum
-                                            :initial-contents norm)))))
+                'bpm :stream stream
+                :snps (make-array (length snps) :initial-contents snps)
+                :chromosomes (loop
+                                for chr being the hash-keys of chromosomes
+                                collect chr into chrs
+                                finally (return (sort chrs #'string<))))))
         (do ((line (read-line stream nil :eof) (read-line stream nil :eof))
              (i 0 (1+ i)))
-            ((eql :eof line) (make-bpm i))
-          (let ((record (parse-bpm-record line)))
-            (unless (= (1+ i) (assocdr 'index record))
-              (error 'malformed-file-error
-                     "SNP records were not in ascending order"))
-            (index-snp record i)
-            (index-chr record i)
-            (store record 'name names)
-            (store record 'position posn)
-            (store record 'norm-id norm)))))))
+            ((eql :eof line) (make-bpm))
+          (let* ((record (parse-bpm-record line))
+                 (index (assocdr 'index record))
+                 (chromosome (assocdr 'chromosome record)))
+            (when (and strict-ordering (/= (1+ i) index))
+              (error 'malformed-file-error :file stream
+                     :format-control "SNP records were not in ascending order ~
+                                      with strict ordering, expected record ~
+                                      ~d, found ~d"
+                     :format-arguments (list (1+ i) index)))
+            (setf (gethash chromosome chromosomes) t)
+            (vector-push-extend
+             (make-snp index
+                       (assocdr 'name record)
+                       chromosome
+                       (assocdr 'position record)
+                       (assocdr 'alleles record)
+                       (assocdr 'ilmn-strand record)
+                       (assocdr 'cust-strand record)
+                       (assocdr 'norm-id record)) snps 50000)))))))
 
 (define-line-parser parse-bpm-record #\,
   ((index :type :integer)
    (name :type :string)
    (chromosome :type :string)
    (position :type :integer)
-   (gentrain-score :type :float)
-   (snp :type :string)
+   (gentrain-score :type :float :ignore t)
+   (alleles :type :string)
    (ilmn-strand :type :string :parser #'parse-strand)
-   (customer-strand :type :string :parser #'parse-strand)
+   (cust-strand :type :string :parser #'parse-strand)
    (norm-id :type :integer)))
 
 (declaim (inline parse-strand))
 (defun parse-strand (field-name str &key (start 0) end null-str)
+  "Returns a character representing the SNP strand, one of T (TOP),
+B (BOT), - (MINUS) or + (PLUS)."
   (declare (ignore field-name null-str))
   (declare (optimize (speed 3)))
   (declare (type simple-string str))
-  (intern (subseq str start end) :keyword))
+  (cond
+    ((string= "TOP" str :start2 start :end2 end)
+     #\T)
+    ((string= "BOT" str :start2 start :end2 end)
+     #\B)
+    ((string= "PLUS" str :start2 start :end2 end)
+     #\+)
+    ((string= "MINUS" str :start2 start :end2 end)
+     #\-)
+    (t
+     (error 'malformed-field-error :field (subseq str start end) :record str))))
 
-(defun rank-norm-ids (norm-ids)
-  "Modifies vector NORM-IDS containing all NormIDs in the manifest,
-by substituting each NormID with its rank on the sorted set of all
-unique NormIDs. Ranks start from 0. The rank for each SNP is then an
-index into the vector of XForms within any GTC file and indicates
-which normalization parameters (XForm) is to be used for each SNP."
-  (let* ((rank-order (sort (remove-duplicates norm-ids) #'<))
-         (rank-map (make-hash-table :size (length rank-order))))
+(defun location< (snp1 snp2)
+  (let ((chr1 (snp-chromosome snp1))
+        (chr2 (snp-chromosome snp2)))
+    (if (string= chr1 chr2)
+        (< (snp-position snp1) (snp-position snp2))
+        (string< chr1 chr2))))
+
+(defun rank-norm-ids (snps)
+  "Modifies vector SNPS containing all SNPs in the manifest,
+by setting the NORM-RANK field to a value equal to the rank of the
+SNP's NORM-ID on the sorted set of all unique NORM-IDs. Ranks start
+from 0. The rank for each SNP is then an index into the vector of
+XForms within any GTC file and indicates which normalization
+parameters (XForm) is to be used for each SNP."
+  (let* ((norm-ids (loop
+                      with ids = (make-hash-table)
+                      for snp across snps
+                      do (setf (gethash (snp-norm-id snp) ids) t)
+                      finally (return (loop
+                                         for id being the hash-keys of ids
+                                         collect id))))
+         (rank-order (sort (make-array (length norm-ids) :element-type 'fixnum
+                                       :initial-contents norm-ids) #'<))
+         (rank-map (loop
+                      with ranks = (make-hash-table)
+                      for rank from 0 below (length rank-order)
+                      do (setf (gethash (aref rank-order rank) ranks) rank)
+                      finally (return ranks))))
     (loop
        for rank from 0 below (length rank-order)
        do (setf (gethash (aref rank-order rank) rank-map) rank))
     (loop
-       for i from 0 below (length norm-ids)
-       do (setf (aref norm-ids i) (gethash (aref norm-ids i) rank-map))
-       finally (return norm-ids))))
+       for snp across snps
+       do (setf (snp-norm-rank snp) (gethash (snp-norm-id snp) rank-map))
+       finally (return snps))))

@@ -30,11 +30,20 @@
    #:read-bpm
    #:alleles-of
    #:chromosomes-of
-   #:names-of
+   #:snps-of
    #:num-snps-of
-   #:positions-of
-   #:find-snp
 
+   ;; SNP
+   #:snp-index
+   #:snp-name
+   #:snp-chromosome
+   #:snp-position
+   #:snp-alleles
+   #:snp-ilmn-strand
+   #:snp-cust-strand
+   #:snp-norm-id
+   #:snp-norm-rank
+   
    ;; GTC
    #:read-gtc
    #:data-field-of
