@@ -29,18 +29,6 @@
                          :reserved3 :reserved4 :reserved5)
   "The fields of a normalization XForm.")
 
-(defmacro with-restored-position (stream &body body)
-  "Execute BODY, ensuring that the file position of STREAM, if
-changed, is restored on leaving."
-  (with-gensyms (pos)
-    `(let ((,pos (file-position stream)))
-       (unwind-protect
-            (progn
-              ,@body)
-         (when (and ,stream (open-stream-p ,stream))
-           (unless (= (file-position stream) ,pos)
-             (file-position stream ,pos)))))))
-
 (defclass gtc ()
   ((stream :initform nil :initarg :stream :reader stream-of
            :documentation "The input stream.")
@@ -68,9 +56,9 @@ changed, is restored on leaving."
   (with-slots (stream version toc)
       gtc
     (let ((buffer (make-array 4 :element-type 'octet :initial-element 0)))
-      (read-magic stream buffer)
+      (read-magic stream buffer *gtc-magic*)
       (setf version (read-version stream buffer)
-            toc (read-toc stream buffer)))))
+            toc (read-gtc-toc stream buffer)))))
 
 (defmethod print-object ((gtc gtc) stream)
   (print-unreadable-object (gtc stream :type t :identity nil)
@@ -103,7 +91,7 @@ Returns:
   (:method ((gtc gtc) (name symbol))
     (let ((toc-entry (find name (toc-of gtc) :key #'name-of)))
       (check-arguments toc-entry (name) "is not a GTC data field")
-      (read-data-field gtc toc-entry))))
+      (read-gtc-data-field gtc toc-entry))))
 
 (defun read-gtc (stream)
   "Returns a new GTC object read from STREAM."
@@ -129,28 +117,16 @@ alist XFORM."
            (x3 (- x2 (* shear y2))))
       (values (/ x3 scale-x) (/ y2 scale-y)))))
 
-(defun read-magic (stream buffer)
-  "Reads the GTC magic number from STREAM and returns T if it is valid."
-  (let ((buffer (read-record stream buffer 3)))
-    (or (equalp *gtc-magic* (subseq buffer 0 3))
-        (error 'malformed-file-error :file (file-namestring stream)
-               :format-control "invalid GTC magic number ~a"
-               :format-arguments (list buffer)))))
-
-(defun read-version (stream buffer)
-  "Reads the GTC version from STREAM."
-  (decode-uint8le (read-record stream buffer 1)))
-
-(defun read-toc (stream buffer)
+(defun read-gtc-toc (stream buffer)
   "Reads the GTC table of contents fom STREAM as a simple-array."
   (let ((toc (make-array (decode-uint32le (read-record stream buffer 4))
                          :initial-element nil)))
     (loop
        for i from 0 below (length toc)
-       do (setf (aref toc i) (read-toc-entry stream buffer))
+       do (setf (aref toc i) (read-gtc-toc-entry stream buffer))
        finally (return toc))))
 
-(defun read-toc-entry (stream buffer)
+(defun read-gtc-toc-entry (stream buffer)
   "Reads a single toc-entry from STREAM."
   (let* ((id (decode-uint16le (read-record stream buffer 2)))
          (position (decode-uint32le (read-record stream buffer 4))))
@@ -165,21 +141,21 @@ alist XFORM."
           (200 '(:imaging-date read-string))
           (201 '(:autocall-date read-string))
           (300 '(:autocall-version read-string))
-          (400 '(:normalization-xforms read-xforms))
-          (500 '(:x-controls read-intensities))
-          (501 '(:y-controls read-intensities))
-          (1000 '(:x-intensities read-intensities))
-          (1001 '(:y-intensities read-intensities))
-          (1002 '(:genotypes read-genotypes))
-          (1003 '(:basecalls read-basecalls))
-          (1004 '(:genotype-scores read-genotype-scores))
-          (1005 '(:scanner-data read-scanner-data))
+          (400 '(:normalization-xforms read-gtc-xforms))
+          (500 '(:x-controls read-gtc-intensities))
+          (501 '(:y-controls read-gtc-intensities))
+          (1000 '(:x-intensities read-gtc-intensities))
+          (1001 '(:y-intensities read-gtc-intensities))
+          (1002 '(:genotypes read-gtc-genotypes))
+          (1003 '(:basecalls read-gtc-basecalls))
+          (1004 '(:genotype-scores read-gtc-genotype-scores))
+          (1005 '(:scanner-data read-gtc-scanner-data))
           (otherwise '(:unknown nil)))
       (make-instance 'toc-entry :name name
                      :parser (and fname (symbol-function fname))
                      :position position :immediate immediate))))
 
-(defun read-data-field (gtc toc-entry)
+(defun read-gtc-data-field (gtc toc-entry)
   "Returns a parsed data element denoted by TOC-ENTRY in the GTC toc."
   (with-slots (stream)
       gtc
@@ -191,7 +167,7 @@ alist XFORM."
             (file-position stream (position-of toc-entry))
             (funcall fn stream buffer))))))
 
-(defun read-intensities (stream buffer)
+(defun read-gtc-intensities (stream buffer)
   "Reads intensities from STREAM as a vector of uint16."
   (let* ((n (read-uint32 stream buffer))
          (intensities (make-array n :element-type 'uint16 :initial-element 0)))
@@ -201,7 +177,7 @@ alist XFORM."
             (setf (aref intensities i) (decode-uint16le buffer)))
        finally (return intensities))))
 
-(defun read-xforms (stream buffer)
+(defun read-gtc-xforms (stream buffer)
   "Reads intensity normalization transforms from STREAM as a
 simple-array of alists. Not all of the transforms are applied to every
 SNP intensity; the information on which to apply is contained in the
@@ -218,7 +194,7 @@ beadpool manifest."
                           *xform-fields*)))
          finally (return xforms))))
 
-(defun read-genotypes (stream buffer)
+(defun read-gtc-genotypes (stream buffer)
   "Reads genotype calls from STREAM as a simple-array of strings."
   (let* ((len (read-uint32 stream buffer))
          (genotypes (make-array len :element-type t :initial-element nil))
@@ -233,7 +209,7 @@ beadpool manifest."
                                      (3 "BB")))
        finally (return genotypes))))
 
-(defun read-genotype-scores (stream buffer)
+(defun read-gtc-genotype-scores (stream buffer)
   "Reads genotype scores from STREAM as a vector of single-floats."
   (let* ((n (read-uint32 stream buffer))
          (scores (make-array n :element-type 'float :initial-element 0.f0)))
@@ -242,7 +218,7 @@ beadpool manifest."
          do (setf (aref scores i) (read-float stream buffer))
          finally (return scores))))
 
-(defun read-basecalls (stream buffer)
+(defun read-gtc-basecalls (stream buffer)
   "Reads basecalls from STREAM as a string."
   (let* ((n (read-uint32 stream buffer))
          (basecalls (make-array n :initial-element nil)))
@@ -252,7 +228,7 @@ beadpool manifest."
             (setf (aref basecalls i) (octets-to-string rec 0 2)))
        finally (return basecalls))))
 
-(defun read-scanner-data (stream buffer)
+(defun read-gtc-scanner-data (stream buffer)
   "Reads the scanner data from STREAM as an alist."
   (let* ((scanner-name (read-string stream buffer))
          (pmt-green (read-uint32 stream buffer))
@@ -263,24 +239,3 @@ beadpool manifest."
                :scanner-version :imaging-user)
              (list scanner-name pmt-green pmt-red
                    scanner-version imaging-user))))
-
-(defun read-float (stream buffer)
-  (decode-float32le (read-record stream buffer 4)))
-
-(defun read-uint32 (stream buffer)
-  (decode-uint32le (read-record stream buffer 4)))
-
-(defun read-string (stream buffer)
-  (let ((buffer (read-record stream buffer 1)))
-    (let* ((len (decode-uint8le buffer))
-           (str (make-array len :element-type 'octet :initial-element 0)))
-      (octets-to-string (read-record stream str len)))))
-
-(defun read-record (stream buffer record-size)
-  (let ((num-bytes (read-sequence buffer stream :end record-size)))
-    (unless (= num-bytes record-size)
-      (error 'malformed-record-error
-             :record (subseq buffer 0 num-bytes)
-             :format-control "only read ~d of ~d expected bytes"
-             :format-arguments (list num-bytes record-size)))
-    buffer))

@@ -33,6 +33,7 @@
                         :serial t
                         :pathname "src/"
                         :components ((:file "package")
+                                     (:file "utilities")
                                      (:file "gtc")
                                      (:file "bpm")))
                (:lift-test-config :lift-tests
