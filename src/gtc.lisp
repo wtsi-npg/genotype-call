@@ -19,10 +19,9 @@
 
 (in-package :uk.ac.sanger.genotype-call)
 
-(defvar *gtc-magic* (make-array 3 :element-type 'octet
-                                :initial-contents (mapcar #'char-code
-                                                          '(#\g #\t #\c)))
-  "GTC file magic string.")
+(defvar *gtc-magic* (map-into (make-array 3 :element-type 'octet)
+                              #'char-code "gtc")
+  "Genotype Call (GTC) file magic string.")
 
 (defvar *xform-fields* '(:offset-x :offset-y
                          :scale-x :scale-y :shear :theta
@@ -49,9 +48,7 @@ changed, is restored on leaving."
             :documentation "The GTC format version.")
    (toc :initform nil :reader toc-of
         :documentation "The table of contents. A vector of TOC-ENTRY
-        objects.")
-   (buffer :initform (make-array 4 :element-type 'octet :initial-element 0)
-           :documentation "A data decoding buffer."))
+        objects."))
   (:documentation "An Illumina Genotype Call binary file. These files
   are created by the Illumina genotyping process."))
 
@@ -68,11 +65,12 @@ changed, is restored on leaving."
   entry."))
 
 (defmethod initialize-instance :after ((gtc gtc) &key)
-  (with-slots (stream buffer version toc)
+  (with-slots (stream version toc)
       gtc
-    (read-magic stream buffer)
-    (setf version (read-version stream buffer)
-          toc (read-toc stream buffer))))
+    (let ((buffer (make-array 4 :element-type 'octet :initial-element 0)))
+      (read-magic stream buffer)
+      (setf version (read-version stream buffer)
+            toc (read-toc stream buffer)))))
 
 (defmethod print-object ((gtc gtc) stream)
   (print-unreadable-object (gtc stream :type t :identity nil)
@@ -183,11 +181,12 @@ alist XFORM."
 
 (defun read-data-field (gtc toc-entry)
   "Returns a parsed data element denoted by TOC-ENTRY in the GTC toc."
-  (with-slots (stream buffer)
+  (with-slots (stream)
       gtc
     (if (immediate-value-p toc-entry)
         (position-of toc-entry)
-        (let ((fn (parser-of toc-entry)))
+        (let ((buffer (make-array 4 :element-type 'octet :initial-element 0))
+              (fn (parser-of toc-entry)))
           (with-restored-position stream
             (file-position stream (position-of toc-entry))
             (funcall fn stream buffer))))))
