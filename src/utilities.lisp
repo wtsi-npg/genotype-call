@@ -32,19 +32,28 @@ changed, is restored on leaving."
              (file-position stream ,pos)))))))
 
 (defun read-magic (stream buffer expected)
-  (let ((buffer (read-record stream buffer 3))
-        (magic (subseq buffer 0 (length expected))))
+  (let* ((len (length expected))
+         (magic (subseq (read-record stream buffer len) 0  len)))
     (or (equalp expected magic)
-        (error 'malformed-file-error :file (file-namestring stream)
+        (error 'malformed-file-error :file stream
                :format-control "invalid magic number: expected ~a, found ~a"
                :format-arguments (list expected magic)))))
+
+(defun write-magic (magic stream)
+  (write-sequence magic stream))
 
 (defun read-version (stream buffer)
   "Reads the file version from STREAM."
   (decode-uint8le (read-record stream buffer 1)))
 
+(defun write-version (version stream)
+  (write-byte version stream))
+
 (defun read-float (stream buffer)
   (decode-float32le (read-record stream buffer 4)))
+
+(defun read-uint16 (stream buffer)
+  (decode-uint16le (read-record stream buffer 2)))
 
 (defun read-uint32 (stream buffer)
   (decode-uint32le (read-record stream buffer 4)))

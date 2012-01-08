@@ -35,50 +35,54 @@
       (ensure (equal counts (mapcar (lambda (chr)
                                       (num-snps-of manifest chr)) chrs))))))
 
-(addtest (genotype-call-tests) read-gtc/1
+(addtest (genotype-call-tests) gtc-open/close/1
   (with-open-file (stream (merge-pathnames "data/example.gtc")
                           :element-type 'octet)
-    (let ((gtc (read-gtc stream)))
+    (let ((gtc (gtc-open stream)))
+      (ensure gtc)
       (ensure (= 3 (version-of gtc)))
-      (ensure (= 24 (length (toc-of gtc)))))))
+      (ensure (= 24 (length (toc-of gtc))))
+      (ensure (gtc-close gtc)))))
+
+(addtest (genotype-call-tests) with-gtc/1
+  (with-gtc (gtc (merge-pathnames "data/example.gtc"))
+     (ensure (= 3 (version-of gtc)))
+     (ensure (= 24 (length (toc-of gtc))))))
 
 (addtest (genotype-call-tests) data-field-of/1
-  (with-open-file (stream (merge-pathnames "data/example.gtc")
-                          :element-type 'octet)
-    (let ((gtc (read-gtc stream)))
-      (ensure (= 660447 (data-field-of gtc :num-snps)))
-      (ensure (string= "test_sample" (data-field-of gtc :sample-name)))
-      (ensure (string= "test_plate_01" (data-field-of gtc :sample-plate)))
-      (ensure (string= "A01" (data-field-of gtc :sample-well)))
-      (ensure (string= "Human670-QuadCustom_v1_A.egt"
-                       (data-field-of gtc :cluster-file)))
-      (ensure (string= "Human670-QuadCustom_v1_A.bpm"
-                       (data-field-of gtc :snp-manifest)))
-      (ensure (string= "Tuesday, June 14, 2011 1:55:35 PM"
-                       (data-field-of gtc :imaging-date)))
-      (ensure (string= "6/14/2011 2:12 PM"
-                       (data-field-of gtc :autocall-date)))
-      (ensure (string= "1.6.2.2"
-                       (data-field-of gtc :autocall-version)))
+  (with-gtc (gtc (merge-pathnames "data/example.gtc"))
+    (ensure (= 660447 (data-field-of gtc :num-snps)))
+    (ensure (string= "test_sample" (data-field-of gtc :sample-name)))
+    (ensure (string= "test_plate_01" (data-field-of gtc :sample-plate)))
+    (ensure (string= "A01" (data-field-of gtc :sample-well)))
+    (ensure (string= "Human670-QuadCustom_v1_A.egt"
+                     (data-field-of gtc :cluster-file)))
+    (ensure (string= "Human670-QuadCustom_v1_A.bpm"
+                     (data-field-of gtc :snp-manifest)))
+    (ensure (string= "Tuesday, June 14, 2011 1:55:35 PM"
+                     (data-field-of gtc :imaging-date)))
+    (ensure (string= "6/14/2011 2:12 PM"
+                     (data-field-of gtc :autocall-date)))
+    (ensure (string= "1.6.2.2"
+                     (data-field-of gtc :autocall-version)))
 
-      (ensure (= 24 (length (data-field-of gtc :normalization-xforms))))
+    (ensure (= 24 (length (data-field-of gtc :normalization-xforms))))
 
-      (ensure-condition (invalid-argument-error)
-        (data-field-of gtc :invalid-field))
+    (ensure-condition (invalid-argument-error)
+      (data-field-of gtc :invalid-field))
       
-      (ensure (= 264 (length (data-field-of gtc :x-controls))))
-      (ensure (= 264 (length (data-field-of gtc :y-controls))))
+    (ensure (= 264 (length (data-field-of gtc :x-controls))))
+    (ensure (= 264 (length (data-field-of gtc :y-controls))))
       
-      (ensure (= 660447 (length (data-field-of gtc :x-intensities))))
-      (ensure (= 660447 (length (data-field-of gtc :y-intensities))))
-      (ensure (= 660447 (length (data-field-of gtc :genotypes))))
-      (ensure (= 660447 (length (data-field-of gtc :basecalls))))
-      (ensure (= 660447 (length (data-field-of gtc :genotype-scores)))))))
+    (ensure (= 660447 (length (data-field-of gtc :x-intensities))))
+    (ensure (= 660447 (length (data-field-of gtc :y-intensities))))
+    (ensure (= 660447 (length (data-field-of gtc :genotypes))))
+    (ensure (= 660447 (length (data-field-of gtc :basecalls))))
+    (ensure (= 660447 (length (data-field-of gtc :genotype-scores))))))
 
 (addtest (genotype-call-tests) data-field-of/2
-  (with-open-file (stream (merge-pathnames "data/example.gtc")
-                          :element-type 'octet)
-    (let ((xforms (data-field-of (read-gtc stream) :normalization-xforms)))
+  (with-gtc (gtc (merge-pathnames "data/example.gtc"))
+    (let ((xforms (data-field-of gtc :normalization-xforms)))
       (loop
          for xform across xforms
          do (ensure (every #'consp (mapcar (lambda (field)
@@ -86,28 +90,23 @@
                                            *xform-fields*)))))))
 
 (addtest (genotype-call-tests) data-field-of/3
-  (with-open-file (stream (merge-pathnames "data/example.gtc")
-                          :element-type 'octet)
-    (let ((gtc (read-gtc stream)))
-      (ensure (every (lambda (x)
-                       (and (vectorp x) (integerp (aref x 0))))
-                     (mapcar (lambda (field)
-                               (data-field-of gtc field))
-                             '(:x-controls :y-controls
-                               :x-intensities :y-intensities)))))))
+  (with-gtc (gtc (merge-pathnames "data/example.gtc"))
+    (ensure (every (lambda (x)
+                     (and (vectorp x) (integerp (aref x 0))))
+                   (mapcar (lambda (field)
+                             (data-field-of gtc field))
+                           '(:x-controls :y-controls
+                             :x-intensities :y-intensities))))))
 
 (addtest (genotype-call-tests) data-field-of/4
-  (with-open-file (stream (merge-pathnames "data/example.gtc")
-                          :element-type 'octet)
-    (let ((gtc (read-gtc stream)))
-      (ensure (every (lambda (x)
-                       (and (vectorp x) (stringp (aref x 0))))
-                     (mapcar (lambda (field)
-                               (data-field-of gtc field))
-                             '(:genotypes :basecalls)))))))
+  (with-gtc (gtc (merge-pathnames "data/example.gtc"))
+    (ensure (every (lambda (x)
+                     (and (vectorp x) (stringp (aref x 0))))
+                   (mapcar (lambda (field)
+                             (data-field-of gtc field))
+                           '(:genotypes :basecalls))))))
 
 (addtest (genotype-call-tests) data-field-of/5
-  (with-open-file (stream (merge-pathnames "data/example.gtc")
-                          :element-type 'octet)
-    (let ((scores (data-field-of (read-gtc stream) :genotype-scores)))
+  (with-gtc (gtc (merge-pathnames "data/example.gtc"))
+    (let ((scores (data-field-of gtc :genotype-scores)))
       (ensure (and (vectorp scores) (floatp (aref scores 0)))))))

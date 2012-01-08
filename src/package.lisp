@@ -45,11 +45,16 @@
    #:snp-norm-rank
    
    ;; GTC
+   #:with-gtc
+   #:gtc-open
+   #:gtc-close
    #:read-gtc
    #:data-field-of
    #:toc-of
-   #:version-of
-   #:normalize)
+   #:normalize
+
+   ;; Utilities
+   #:version-of)
   (:documentation "This package provides functions for reading
   Genotype Call (GTC) files created by Illumina's AutoCall
   software."))

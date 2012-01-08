@@ -93,10 +93,24 @@ Returns:
       (check-arguments toc-entry (name) "is not a GTC data field")
       (read-gtc-data-field gtc toc-entry))))
 
-(defun read-gtc (stream)
-  "Returns a new GTC object read from STREAM."
-  (check-arguments (streamp stream) (stream) "expected a stream argument")
-  (make-instance 'gtc :stream stream))
+(defmacro with-gtc ((var filespec &rest args) &body body)
+  `(let ((,var (gtc-open ,filespec ,@args)))
+     (unwind-protect
+          (progn
+            ,@body)
+       (when ,var
+         (gtc-close ,var)))))
+
+(defun gtc-open (filespec &rest args)
+  (let ((stream (apply #'open filespec :element-type 'octet args)))
+    (if (open-stream-p stream)
+        (make-instance 'gtc :stream stream)
+        (error 'invalid-operation-error
+               :format-control "GTC stream ~a  closed unexpectedly"
+               :format-arguments (list stream)))))
+
+(defun gtc-close (gtc)
+  (close (stream-of gtc)))
 
 (defun normalize (x y xform)
   "Returns X and Y intensities as two values after normalization with
