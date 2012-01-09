@@ -46,17 +46,29 @@ changed, is restored on leaving."
   "Reads the file version from STREAM."
   (decode-uint8le (read-record stream buffer 1)))
 
-(defun write-version (version stream)
-  (write-byte version stream))
+(defun write-version (version stream buffer)
+  (write-sequence (encode-int8le version buffer) stream :end 1))
 
 (defun read-float (stream buffer)
   (decode-float32le (read-record stream buffer 4)))
 
+(defun read-uint8 (stream buffer)
+  (decode-uint8le (read-record stream buffer 1)))
+
+(defun write-uint8 (value stream buffer)
+  (write-sequence (encode-int8le value buffer) stream :end 1))
+
 (defun read-uint16 (stream buffer)
   (decode-uint16le (read-record stream buffer 2)))
 
+(defun write-uint16 (value stream buffer)
+  (write-sequence (encode-int16le value buffer) stream :end 2))
+
 (defun read-uint32 (stream buffer)
   (decode-uint32le (read-record stream buffer 4)))
+
+(defun write-uint32 (value stream buffer)
+  (write-sequence (encode-int32le value buffer) stream :end 4))
 
 (defun read-string (stream buffer)
   (let ((buffer (read-record stream buffer 1)))
