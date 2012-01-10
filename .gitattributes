@@ -1,2 +1,2 @@
 *.gtc -crlf -diff -merge
-
+*.sim -crlf -diff -merge
