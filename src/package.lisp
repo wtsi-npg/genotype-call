@@ -33,6 +33,8 @@
    #:snps-of
    #:num-snps-of
 
+   #:make-chromosome-p
+
    ;; SNP
    #:snp-index
    #:snp-name
@@ -52,6 +54,17 @@
    #:data-field-of
    #:toc-of
    #:normalize
+
+   ;; SIM
+   #:with-sim
+   #:sim-open
+   #:sim-close
+   #:name-size-of
+   #:num-samples-of
+   #:num-probes-of
+   #:num-channels-of
+   #:format-of
+   #:write-intensities
 
    ;; Utilities
    #:version-of)

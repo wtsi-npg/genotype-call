@@ -62,31 +62,51 @@ Beadpool Manifest."
               (when (subtypep (type-of s) 'file-stream)
                 (file-namestring s)) (length snps)))))
 
-(defgeneric snps-of (manifest &optional chromosome)
+(defgeneric snps-of (manifest &key key test)
   (:documentation "Returns the SNPs described by MANIFEST, optionally
-  restricting the count to only those SNPs on CHROMOSOME.")
-  (:method ((manifest bpm) &optional chromosome)
-    (with-slots (snps chromosomes)
+  restricting the count to only those SNPs for which predicate TEST
+  returns T.")
+  (:method ((manifest bpm) &key key test)
+    (with-slots (snps)
         manifest
-      (cond (chromosome
-             (check-arguments (member chromosome chromosomes :test #'string=)
-                              (chromosome)
-                              "invalid chromosome, expected one of ~a"
-                              chromosomes)
-             (loop
-                for snp across snps
-                when (string= chromosome (snp-chromosome snp))
-                count snp into n
-                and collect snp into subset
-                finally (return (make-array n :initial-contents subset))))
-            (t
-             snps)))))
+      (if (null test)
+          snps
+          (let ((key (cond ((null key)
+                            #'identity)
+                           ((functionp key)
+                            key)
+                           (t
+                            (fdefinition key))))
+                (test (cond ((functionp test)
+                             test)
+                            (t
+                             (fdefinition test)))))
+            (loop
+               for snp across snps
+               when (funcall test (funcall key snp))
+               count snp into n
+               and collect snp into subset
+               finally (return (make-array n :initial-contents subset))))))))
 
-(defgeneric num-snps-of (manifest &optional chromosome)
+(defgeneric num-snps-of (manifest &key key test)
   (:documentation "Returns the number of SNPs described by MANIFEST,
-  optionally restricting the count to only those SNPs on CHROMOSOME.")
-  (:method ((manifest bpm) &optional chromosome)
-    (length (snps-of manifest chromosome))))
+  optionally restricting the count to only those SNPs for which
+  predicate TEST returns T.")
+  (:method ((manifest bpm) &key key test)
+    (length (snps-of manifest :key key :test test))))
+
+(defun make-chromosome-p (manifest chromosome pred)
+  (with-slots (chromosomes)
+      manifest
+    (check-arguments (member chromosome chromosomes :test pred)
+                     (chromosome)
+                     "invalid chromosome, expected one of ~a"
+                     chromosomes))
+  (let ((pred (if (functionp pred)
+                  pred
+                  (fdefinition pred))))
+    (lambda (arg)
+      (funcall pred chromosome arg))))
 
 (defun read-bpm (stream &key (strict-ordering t))
   "Returns a new BPM object from read STREAM."

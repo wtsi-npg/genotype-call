@@ -33,7 +33,11 @@
       (ensure (= 10 (num-snps-of manifest)))
       (ensure (equal chrs (chromosomes-of manifest)))
       (ensure (equal counts (mapcar (lambda (chr)
-                                      (num-snps-of manifest chr)) chrs))))))
+                                      (num-snps-of manifest
+                                                   :key #'snp-chromosome
+                                                   :test (lambda (x)
+                                                           (string= chr x))))
+                                    chrs))))))
 
 (addtest (genotype-call-tests) gtc-open/close/1
   (with-open-file (stream (merge-pathnames "data/example.gtc")
@@ -110,3 +114,38 @@
   (with-gtc (gtc (merge-pathnames "data/example.gtc"))
     (let ((scores (data-field-of gtc :genotype-scores)))
       (ensure (and (vectorp scores) (floatp (aref scores 0)))))))
+
+(addtest (genotype-call-tests) gtc-to-sim/1
+  (handler-bind ((error #'leave-tmp-pathname))
+    (with-tmp-pathname (tmp :tmpdir (merge-pathnames "data") :type "sim")
+      (with-open-file (stream (merge-pathnames "data/example.bpm.csv"))
+        (let ((manifest (read-bpm stream))
+              (count 5))
+          (with-sim (sim tmp :direction :output :if-exists :supersede
+                         :if-does-not-exist :create)
+            (dotimes (n count)
+              (with-gtc (gtc (merge-pathnames "data/example.gtc"))
+                (ensure (write-intensities gtc manifest sim)))
+              (ensure (= (1+ n) (num-samples-of sim))
+                      :report "expected ~d, but found ~d"
+                      :arguments ((1+ n) (num-samples-of sim)))))
+          (with-sim (sim tmp)
+            (ensure (= count (num-samples-of sim)))))))))
+
+(addtest (genotype-call-tests) sim-open-close/1
+  (with-open-file (stream (merge-pathnames "data/example.sim")
+                          :element-type 'octet)
+    (let ((sim (sim-open stream)))
+      (ensure sim)
+      (ensure (= 1 (version-of sim)))
+      (ensure (sim-close sim)))))
+
+(addtest (genotype-call-tests) with-sim/1
+  (with-sim (sim (merge-pathnames "data/example.sim"))
+    (ensure sim)
+    (ensure (= 1 (version-of sim)))
+    (ensure (= 255 (name-size-of sim)))
+    (ensure (= 5 (num-samples-of sim)))
+    (ensure (= 10 (num-probes-of sim)))
+    (ensure (= 2 (num-channels-of sim)))
+    (ensure (eql 'single-float (format-of sim)))))

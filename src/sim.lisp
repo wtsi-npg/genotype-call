@@ -26,7 +26,7 @@
 (defclass sim ()
   ((stream :initform nil :initarg :stream :reader stream-of
            :documentation "The stream.")
-   (headerp :initform nil)
+   (header-written-p :initform nil)
    (version :initform 1 :reader version-of
             :documentation "The SIM format version.")
    (name-size :initform 255 :initarg :name-size :reader name-size-of)
@@ -36,7 +36,7 @@
    (format :initform 'single-float :initarg :format :accessor format-of)))
 
 (defmethod initialize-instance :after ((sim sim) &key)
-  (with-slots (stream version num-probes num-samples name-size
+  (with-slots (stream version name-size num-probes num-samples
                       num-channels format)
       sim
     (cond ((not (open-stream-p stream))
@@ -44,15 +44,10 @@
                   :format-control "SIM stream ~a  closed unexpectedly"
                   :format-arguments (list stream)))
           ((input-stream-p stream)
-           (let ((buffer (make-array 4 :element-type 'octet
-                                     :initial-element 0)))
-             (read-magic stream buffer *sim-magic*)
-             (setf version (read-version stream buffer)
-                   name-size (read-uint16 stream buffer)
-                   num-probes (read-uint32 stream buffer)
-                   num-samples (read-uint32 stream buffer)
-                   num-channels (read-uint8 stream buffer)
-                   format (read-sim-format stream buffer))))
+           (setf (values version name-size num-probes num-samples
+                         num-channels format)
+                 (read-sim-header stream (make-array 4 :element-type 'octet
+                                                     :initial-element 0))))
           ((output-stream-p stream)
            t))))
 
@@ -89,46 +84,36 @@
                        num-samples (make-array 4 :element-type 'octet)) stream))
     (close stream)))
 
-(defmethod write-header ((sim sim))
-  (with-slots (stream version num-probes num-samples name-size
-                      num-channels format headerp)
-      sim
-    (let ((buffer (make-array 4 :element-type 'octet :initial-element 0)))
-      (write-magic *sim-magic* stream)
-      (write-version version stream buffer)
-      (write-uint16 name-size stream buffer)
-      (write-uint32 num-probes stream buffer)
-      (write-uint32 num-samples stream buffer)
-      (write-uint8 num-channels stream buffer)
-      (write-sim-format format stream buffer)
-      (setf headerp t))))
-
 (defmethod write-intensities :before ((gtc gtc) (manifest bpm) (sim sim)
-                                      &optional chromosome)
-  (with-slots (num-probes num-channels headerp)
+                                      &key key test)
+  (with-slots (stream version num-probes num-samples name-size
+                      num-channels format header-written-p)
       sim
     (check-arguments (= 2 num-channels) (sim)
                      "found ~d intensity channels; expected 2 for GTC data"
                      num-channels)
-    (let ((num-snps (num-snps-of manifest chromosome)))
-      (cond (headerp
+    (let ((num-snps (num-snps-of manifest :key key :test test)))
+      (cond (header-written-p
              (check-arguments (= num-probes num-snps) (manifest sim)
-                              "SIM can hold data for ~d SNPs, but found ~d"
+                              "SIM holds data for ~d SNPs, but found ~d"
                               num-probes num-snps))
             (t
+             (write-sim-header version num-probes num-samples name-size
+                               num-channels format stream
+                               (make-array 4 :element-type 'octet
+                                           :initial-element 0))
              (setf num-probes num-snps
-                   headerp t)
-             (write-header sim))))))
+                   header-written-p t))))))
 
 (defmethod write-intensities ((gtc gtc) (manifest bpm) (sim sim)
-                              &optional chromosome)
+                              &key key test)
   (let ((stream (stream-of sim))
         (name-len (name-size-of sim))
         (sample-name (data-field-of gtc :sample-name))
         (xforms (data-field-of gtc :normalization-xforms))
         (x-intensities (data-field-of gtc :x-intensities))
         (y-intensities (data-field-of gtc :y-intensities))
-        (snps (snps-of manifest chromosome)))
+        (snps (snps-of manifest :key key :test test)))
     (check-arguments (<= (length sample-name) name-len) (gtc sim)
                      (txt "sample name ~s is too long to fit in SIM file"
                           "with limit of ~d characters")
@@ -139,8 +124,8 @@
     (%write-intensities snps x-intensities y-intensities xforms stream)))
 
 (defmethod write-intensities :after ((gtc gtc) (manifest bpm) (sim sim)
-                                     &optional chromosome)
-  (declare (ignore chromosome))
+                                     &key key test)
+  (declare (ignore key test))
   (with-slots (num-samples)
       sim
     (incf num-samples)))
@@ -154,6 +139,25 @@
   (write-uint8 (ecase format
                  (single-float 0)
                  (uint16-scaled 1)) stream buffer))
+
+(defun read-sim-header (stream buffer)
+  (read-magic stream buffer *sim-magic*)
+  (values (read-version stream buffer)
+          (read-uint16 stream buffer)
+          (read-uint32 stream buffer)
+          (read-uint32 stream buffer)
+          (read-uint8 stream buffer)
+          (read-sim-format stream buffer)))
+
+(defun write-sim-header (version num-probes num-samples name-size
+                         num-channels format stream buffer)
+  (write-magic *sim-magic* stream)
+  (write-version version stream buffer)
+  (write-uint16 name-size stream buffer)
+  (write-uint32 num-probes stream buffer)
+  (write-uint32 num-samples stream buffer)
+  (write-uint8 num-channels stream buffer)
+  (write-sim-format format stream buffer))
 
 (defun %write-intensities (snps x-intensities y-intensities xforms stream)
   (let* ((len (length snps))
