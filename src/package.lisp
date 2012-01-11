@@ -64,7 +64,8 @@
    #:num-probes-of
    #:num-channels-of
    #:format-of
-   #:write-intensities
+
+   #:copy-intensities
 
    ;; Utilities
    #:version-of)

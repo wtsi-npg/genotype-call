@@ -84,8 +84,11 @@
                        num-samples (make-array 4 :element-type 'octet)) stream))
     (close stream)))
 
-(defmethod write-intensities :before ((gtc gtc) (manifest bpm) (sim sim)
-                                      &key key test)
+(defgeneric copy-intensities (from to metadata &key key test)
+  (:documentation ""))
+
+(defmethod copy-intensities :before ((gtc gtc) (manifest bpm) (sim sim)
+                                     &key key test)
   (with-slots (stream version num-probes num-samples name-size
                       num-channels format header-written-p)
       sim
@@ -105,8 +108,8 @@
              (setf num-probes num-snps
                    header-written-p t))))))
 
-(defmethod write-intensities ((gtc gtc) (manifest bpm) (sim sim)
-                              &key key test)
+(defmethod copy-intensities ((gtc gtc) (manifest bpm) (sim sim)
+                             &key key test)
   (let ((stream (stream-of sim))
         (name-len (name-size-of sim))
         (sample-name (data-field-of gtc :sample-name))
@@ -119,12 +122,12 @@
                           "with limit of ~d characters")
                      sample-name name-len)
     (write-sequence (string-to-octets sample-name) stream)
-    (dotimes (n (- (name-size-of sim) (length sample-name))) ; pad name
+    (dotimes (n (- (name-size-of sim) (length sample-name))) ; pad the name
       (write-byte 0 stream))
-    (%write-intensities snps x-intensities y-intensities xforms stream)))
+    (write-sim-intensities snps x-intensities y-intensities xforms stream)))
 
-(defmethod write-intensities :after ((gtc gtc) (manifest bpm) (sim sim)
-                                     &key key test)
+(defmethod copy-intensities :after ((gtc gtc) (manifest bpm) (sim sim)
+                                    &key key test)
   (declare (ignore key test))
   (with-slots (num-samples)
       sim
@@ -159,7 +162,7 @@
   (write-uint8 num-channels stream buffer)
   (write-sim-format format stream buffer))
 
-(defun %write-intensities (snps x-intensities y-intensities xforms stream)
+(defun write-sim-intensities (snps x-intensities y-intensities xforms stream)
   (let* ((len (length snps))
          (bindata (make-array (* 2 4 len) :element-type 'octet)))
     (loop
