@@ -52,7 +52,7 @@ Beadpool Manifest."
 (defmethod initialize-instance :after ((manifest bpm) &key)
   (with-slots (snps)
       manifest
-    (setf snps (sort (rank-norm-ids snps) #'location<))))
+    (setf snps (stable-sort (rank-norm-ids snps) #'location<))))
 
 (defmethod print-object ((manifest bpm) stream)
   (print-unreadable-object (manifest stream :type t :identity nil)
