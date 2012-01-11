@@ -125,7 +125,7 @@
                          :if-does-not-exist :create)
             (dotimes (n count)
               (with-gtc (gtc (merge-pathnames "data/example.gtc"))
-                (ensure (copy-intensities gtc manifest sim)))
+                (ensure (copy-intensities gtc sim manifest)))
               (ensure (= (1+ n) (num-samples-of sim))
                       :report "expected ~d, but found ~d"
                       :arguments ((1+ n) (num-samples-of sim)))))

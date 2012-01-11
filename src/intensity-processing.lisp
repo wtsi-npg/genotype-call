@@ -22,7 +22,7 @@
 (defgeneric copy-intensities (from to metadata &key key test)
   (:documentation ""))
 
-(defmethod copy-intensities :before ((gtc gtc) (manifest bpm) (sim sim)
+(defmethod copy-intensities :before ((gtc gtc) (sim sim) (manifest bpm)
                                      &key key test)
   (with-slots (stream version name-size num-probes num-samples num-channels)
       sim
@@ -34,7 +34,7 @@
                        "SIM holds data for ~d SNPs, but found ~d"
                        num-probes num-snps))))
 
-(defmethod copy-intensities ((gtc gtc) (manifest bpm) (sim sim)
+(defmethod copy-intensities ((gtc gtc) (sim sim) (manifest bpm)
                              &key key test)
   (with-slots (stream name-size)
       sim
@@ -54,7 +54,7 @@
       (write-2channel-intensities snps x-intensities y-intensities
                                   isize xforms stream))))
 
-(defmethod copy-intensities :after ((gtc gtc) (manifest bpm) (sim sim)
+(defmethod copy-intensities :after ((gtc gtc) (sim sim) (manifest bpm)
                                     &key key test)
   (declare (ignore key test))
   (with-slots (num-samples)
