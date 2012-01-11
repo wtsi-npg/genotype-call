@@ -26,14 +26,13 @@
 (defclass sim ()
   ((stream :initform nil :initarg :stream :reader stream-of
            :documentation "The stream.")
-   (header-written-p :initform nil)
    (version :initform 1 :reader version-of
             :documentation "The SIM format version.")
    (name-size :initform 255 :initarg :name-size :reader name-size-of)
+   (num-probes :initform 0 :initarg :num-probes :reader num-probes-of)
    (num-samples :initform 0 :initarg :num-samples :accessor num-samples-of)
-   (num-probes :initform 0 :initarg :num-probes :accessor num-probes-of)
    (num-channels :initform 2 :initarg :num-channels :reader num-channels-of)
-   (format :initform 'single-float :initarg :format :accessor format-of)))
+   (format :initform 'single-float :initarg :format :reader format-of)))
 
 (defmethod initialize-instance :after ((sim sim) &key)
   (with-slots (stream version name-size num-probes num-samples
@@ -49,7 +48,9 @@
                  (read-sim-header stream (make-array 4 :element-type 'octet
                                                      :initial-element 0))))
           ((output-stream-p stream)
-           t))))
+           (write-sim-header version name-size num-probes num-samples
+                             num-channels format stream
+                             (make-array 4 :element-type 'octet))))))
 
 (defmethod print-object ((sim sim) stream)
   (print-unreadable-object (sim stream :type t :identity nil)
@@ -71,67 +72,76 @@
          (sim-close ,var)))))
 
 (defun sim-open (filespec &rest args)
-  (let ((stream (apply #'open filespec :element-type 'octet args)))
-    (make-instance 'sim :stream stream)))
+  (multiple-value-bind (oargs initargs)
+      (remove-key-values '(:version :name-size :num-probes
+                           :num-samples :num-channels :format) args)
+    (let ((stream (apply #'open filespec :element-type 'octet oargs)))
+      (apply #'make-instance 'sim :stream stream (flatten initargs)))))
 
 (defun sim-close (sim)
-  (with-slots (stream num-samples)
+  (with-slots (stream num-probes num-samples)
       sim
     (when (output-stream-p stream)
       (unless (file-position stream 10)
         (error 'io-error "failed to write sample count"))
       (write-sequence (encode-int32le
-                       num-samples (make-array 4 :element-type 'octet)) stream))
+                       num-samples (make-array 4 :element-type 'octet
+                                               :initial-element 0)) stream))
     (close stream)))
 
-(defgeneric copy-intensities (from to metadata &key key test)
-  (:documentation ""))
+(defgeneric header-size-of (file)
+  (:method ((sim sim))
+    ;; magic + version + name-size + num-samples + num-probes +
+    ;; num-channels + format
+    (+ 3 1 2 4 4 1 1)))
 
-(defmethod copy-intensities :before ((gtc gtc) (manifest bpm) (sim sim)
-                                     &key key test)
-  (with-slots (stream version num-probes num-samples name-size
-                      num-channels format header-written-p)
-      sim
-    (check-arguments (= 2 num-channels) (sim)
-                     "found ~d intensity channels; expected 2 for GTC data"
-                     num-channels)
-    (let ((num-snps (num-snps-of manifest :key key :test test)))
-      (cond (header-written-p
-             (check-arguments (= num-probes num-snps) (manifest sim)
-                              "SIM holds data for ~d SNPs, but found ~d"
-                              num-probes num-snps))
-            (t
-             (write-sim-header version num-probes num-samples name-size
-                               num-channels format stream
-                               (make-array 4 :element-type 'octet
-                                           :initial-element 0))
-             (setf num-probes num-snps
-                   header-written-p t))))))
+(defgeneric intensity-size-of (file)
+  (:method ((sim sim))
+    (ecase (format-of sim)
+      (single-float 4)
+      (uint16-scaled 2))))
 
-(defmethod copy-intensities ((gtc gtc) (manifest bpm) (sim sim)
-                             &key key test)
-  (let ((stream (stream-of sim))
-        (name-len (name-size-of sim))
-        (sample-name (data-field-of gtc :sample-name))
-        (xforms (data-field-of gtc :normalization-xforms))
-        (x-intensities (data-field-of gtc :x-intensities))
-        (y-intensities (data-field-of gtc :y-intensities))
-        (snps (snps-of manifest :key key :test test)))
-    (check-arguments (<= (length sample-name) name-len) (gtc sim)
-                     (txt "sample name ~s is too long to fit in SIM file"
-                          "with limit of ~d characters")
-                     sample-name name-len)
-    (write-sequence (string-to-octets sample-name) stream)
-    (dotimes (n (- (name-size-of sim) (length sample-name))) ; pad the name
-      (write-byte 0 stream))
-    (write-sim-intensities snps x-intensities y-intensities xforms stream)))
-
-(defmethod copy-intensities :after ((gtc gtc) (manifest bpm) (sim sim)
-                                    &key key test)
-  (declare (ignore key test))
-  (with-slots (num-samples)
-      sim
-    (incf num-samples)))
+(defgeneric read-intensities (file &key start end)
+  (:method ((sim sim) &key (start 0) end)
+    (with-slots (stream name-size num-samples num-probes num-channels)
+        sim
+      (let ((end (or end num-probes))
+            (intensity-size (intensity-size-of sim)))
+        (check-arguments (<= start end num-probes) (start end num-probes)
+                         "must satisfy start <= end <= number of probes")
+        (let ((name-buffer (make-array name-size :element-type 'octet
+                                       :initial-element 0))
+              (buffer (make-array (* (- end start) num-channels intensity-size)
+                                  :element-type 'octet :initial-element 0))
+              (intensities (make-array (* (- end start) num-channels)
+                                       :element-type 'single-float
+                                       :initial-element 0.f0)))
+          (unless (= name-size (read-sequence name-buffer stream))
+            (error 'malformed-record-error :record name-buffer
+                   :format-control "failed to read sample name"))
+          ;; Maybe seek to start of intensities
+          (when (plusp start)
+            (unless (file-position stream (+ (* intensity-size start)
+                                             (file-position stream)))
+              (error 'malformed-file-error :file sim
+                     "failed to seek to start of intensity data")))
+          (let ((n (read-sequence buffer stream)))
+            (unless (= (length buffer) n)
+              (error 'malformed-file-error :file sim
+                     :format-control "expected ~d bytes, but read ~d"
+                     :format-arguments (list (length buffer) n)))
+            (loop
+               for i from 0 below n by intensity-size
+               for j = 0 then (1+ j)
+               do (setf (aref intensities j) (decode-float32le buffer i))))
+          ;; Maybe seek to end of intensities
+          (when (/= num-probes end)
+            (unless (file-position stream (+ (* intensity-size end)
+                                             (file-position stream)))
+              (error 'malformed-file-error :file sim
+                     "failed to seek to end of intensity data")))
+          (values intensities (string-right-trim
+                               '(#\Nul) (octets-to-string name-buffer))))))))
 
 (defun read-sim-format (stream buffer)
   (ecase (read-uint8 stream buffer)
@@ -146,13 +156,13 @@
 (defun read-sim-header (stream buffer)
   (read-magic stream buffer *sim-magic*)
   (values (read-version stream buffer)
-          (read-uint16 stream buffer)
-          (read-uint32 stream buffer)
-          (read-uint32 stream buffer)
-          (read-uint8 stream buffer)
+          (read-uint16 stream buffer)   ; name-size
+          (read-uint32 stream buffer)   ; num-samples
+          (read-uint32 stream buffer)   ; num-probes
+          (read-uint8 stream buffer)    ; num-channels
           (read-sim-format stream buffer)))
 
-(defun write-sim-header (version num-probes num-samples name-size
+(defun write-sim-header (version name-size num-probes num-samples
                          num-channels format stream buffer)
   (write-magic *sim-magic* stream)
   (write-version version stream buffer)
@@ -162,9 +172,10 @@
   (write-uint8 num-channels stream buffer)
   (write-sim-format format stream buffer))
 
-(defun write-sim-intensities (snps x-intensities y-intensities xforms stream)
+(defun write-2channel-intensities (snps x-intensities y-intensities
+                                   intensity-size xforms stream)
   (let* ((len (length snps))
-         (bindata (make-array (* 2 4 len) :element-type 'octet)))
+         (bindata (make-array (* 2 intensity-size len) :element-type 'octet)))
     (loop
        for snp across snps
        for j from 0 by 8
@@ -176,4 +187,3 @@
               (encode-float32le xnorm bindata j)
               (encode-float32le ynorm bindata k)))
        finally (return (write-sequence bindata stream)))))
-
