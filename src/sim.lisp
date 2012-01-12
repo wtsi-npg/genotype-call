@@ -79,14 +79,15 @@
       (apply #'make-instance 'sim :stream stream (flatten initargs)))))
 
 (defun sim-close (sim)
-  (with-slots (stream num-probes num-samples)
+  (with-slots (stream version name-size num-probes num-samples
+                      num-channels format)
       sim
     (when (output-stream-p stream)
-      (unless (file-position stream 10)
-        (error 'io-error "failed to write sample count"))
-      (write-sequence (encode-int32le
-                       num-samples (make-array 4 :element-type 'octet
-                                               :initial-element 0)) stream))
+      (unless (file-position stream 0)
+        (error 'io-error "failed to write header"))
+      (write-sim-header version name-size num-probes num-samples
+                        num-channels format stream
+                        (make-array 4 :element-type 'octet :initial-element 0)))
     (close stream)))
 
 (defgeneric header-size-of (file)
