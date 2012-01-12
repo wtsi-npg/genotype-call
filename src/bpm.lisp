@@ -37,8 +37,8 @@ Beadpool Manifest."
   (chromosome "" :type simple-string)
   (position 0 :type fixnum)
   (alleles "" :type simple-string)
-  (ilmn-strand #\- :type character)
-  (cust-strand #\- :type character)
+  (ilmn-strand #\? :type character)
+  (cust-strand #\? :type character)
   (norm-id 0 :type fixnum)
   (norm-rank 0 :type fixnum))
 
@@ -52,7 +52,8 @@ Beadpool Manifest."
 (defmethod initialize-instance :after ((manifest bpm) &key)
   (with-slots (snps)
       manifest
-    (setf snps (stable-sort (rank-norm-ids snps) #'location<))))
+    (setf snps (stable-sort
+                (normalize-allele-strands (rank-norm-ids snps)) #'location<))))
 
 (defmethod print-object ((manifest bpm) stream)
   (print-unreadable-object (manifest stream :type t :identity nil)
@@ -94,6 +95,9 @@ Beadpool Manifest."
   predicate TEST returns T.")
   (:method ((manifest bpm) &key key test)
     (length (snps-of manifest :key key :test test))))
+
+(defun cnv-probe-p (name)
+  (starts-with-string-p name "cnv"))
 
 (defun make-chromosome-p (manifest chromosome pred)
   (with-slots (chromosomes)
@@ -155,7 +159,7 @@ Beadpool Manifest."
    (chromosome :type :string)
    (position :type :integer)
    (gentrain-score :type :float :ignore t)
-   (alleles :type :string)
+   (alleles :type :string :parser #'parse-alleles :validator #'valid-alleles-p)
    (ilmn-strand :type :string :parser #'parse-strand)
    (cust-strand :type :string :parser #'parse-strand)
    (norm-id :type :integer)))
@@ -167,17 +171,53 @@ B (BOT), - (MINUS) or + (PLUS)."
   (declare (ignore field-name null-str))
   (declare (optimize (speed 3)))
   (declare (type simple-string str))
-  (cond
-    ((string= "TOP" str :start2 start :end2 end)
-     #\T)
-    ((string= "BOT" str :start2 start :end2 end)
-     #\B)
-    ((string= "PLUS" str :start2 start :end2 end)
-     #\+)
-    ((string= "MINUS" str :start2 start :end2 end)
-     #\-)
-    (t
-     (error 'malformed-field-error :field (subseq str start end) :record str))))
+  (cond ((char= #\T (char str start))       ; TOP or Top
+         #\T)
+        ((char= #\B (char str start))       ; BOT
+         #\B)
+        ((char= #\P (char str start))       ; PLUS or P
+         #\+)
+        ((char= #\M (char str start))       ; MINUS or M
+         #\-)
+        (t
+         (error 'malformed-field-error :field (subseq str start end)
+                :record str))))
+
+(defun parse-alleles (field-name str &key (start 0) end null-str)
+  (declare (ignore field-name null-str))
+  (cond ((string= "[N/A]" str :start2 start :end2 end)
+         "NA")
+        ((>= (length str) (+ start 3))
+         (coerce (list (char str (1+ start)) (char str (+ start 3)))
+                 'simple-string))
+        (t
+         (error 'malformed-field-error :field (subseq str start end)
+                :record str))))
+
+(defun nucleotidep (c)
+  (or (char= #\A c) (char= #\C c) (char= #\G c) (char= #\T c)))
+
+(defun complement-nucleotide (c)
+  (ecase c
+    (#\A #\T)
+    (#\C #\G)
+    (#\G #\C)
+    (#\T #\A)))
+
+(defun valid-alleles-p (str)
+  (or (string= "NA" str) (string= "DI" str) (string= "ID" str)
+      (every #'nucleotidep str)))
+
+(defun normalize-allele-strands (snps)
+  (loop
+     for snp across snps
+     do (ecase (snp-ilmn-strand snp)
+          ((#\T #\+ #\-) snp)
+          (#\B (let ((norm (map 'simple-string #'complement-nucleotide
+                                (snp-alleles snp))))
+                 (setf (snp-alleles snp) norm
+                       (snp-ilmn-strand snp) #\T))))
+     finally (return snps)))
 
 (defun location< (snp1 snp2)
   (let ((chr1 (snp-chromosome snp1))
