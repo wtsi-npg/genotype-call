@@ -30,9 +30,11 @@
                      "found ~d intensity channels; expected 2 for GTC data"
                      num-channels)
     (let ((num-snps (num-snps-of manifest :key key :test test)))
-      (check-arguments (= num-probes num-snps) (manifest sim)
-                       "SIM holds data for ~d SNPs, but found ~d"
-                       num-probes num-snps))))
+      (if (zerop num-samples)
+          (setf num-probes num-snps)
+          (check-arguments (= num-probes num-snps) (sim manifest)
+                           "SIM holds data for ~d SNPs, but found ~d"
+                           num-probes num-snps)))))
 
 (defmethod copy-intensities ((gtc gtc) (sim sim) (manifest bpm)
                              &key key test)
