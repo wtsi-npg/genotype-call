@@ -175,12 +175,17 @@
 
 (defun write-2channel-intensities (snps x-intensities y-intensities
                                    intensity-size xforms stream)
-  (let* ((len (length snps))
-         (bindata (make-array (* 2 intensity-size len) :element-type 'octet)))
+  (declare (optimize (speed 3) (safety 1)))
+  (declare (type simple-vector snps)
+           (type (simple-array uint16 (*)) x-intensities y-intensities)
+           (type (integer 2 4) intensity-size))
+  (let ((total-size (* 2 intensity-size (length snps)))
+        (pair-size (* 2 intensity-size)))
     (loop
+       with bindata = (make-array total-size :element-type 'octet)
        for snp across snps
-       for j from 0 by 8
-       for k = (+ j 4)
+       for j of-type fixnum from 0 by pair-size
+       for k of-type fixnum = (+ j intensity-size)
        do (let ((m (1- (snp-index snp))))
             (multiple-value-bind (xnorm ynorm)
                 (normalize (aref x-intensities m) (aref y-intensities m)

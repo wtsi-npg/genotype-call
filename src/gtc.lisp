@@ -183,12 +183,18 @@ alist XFORM."
 
 (defun read-gtc-intensities (stream buffer)
   "Reads intensities from STREAM as a vector of uint16."
+  (declare (optimize (speed 3)))
   (let* ((n (read-uint32 stream buffer))
-         (intensities (make-array n :element-type 'uint16 :initial-element 0)))
+         (num-bytes (* 2 (the uint32 n)))
+         (intensities (make-array n :element-type 'uint16
+                                  :initial-element 0))
+         (read-buffer (read-record
+                       stream (make-array num-bytes :element-type 'octet
+                                          :initial-element 0) num-bytes)))
     (loop
        for i from 0 below n
-       do (let ((buffer (read-record stream buffer 2)))
-            (setf (aref intensities i) (decode-uint16le buffer)))
+       for j from 0 below num-bytes by 2
+       do  (setf (aref intensities i) (decode-uint16le read-buffer j))
        finally (return intensities))))
 
 (defun read-gtc-xforms (stream buffer)
