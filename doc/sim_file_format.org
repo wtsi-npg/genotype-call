@@ -39,17 +39,17 @@
    
    The header structure is as follows:
 
-   |------------------------+-----------|
-   | Element                | Data type |
-   |------------------------+-----------|
-   | File type magic string | char\[3\] |
-   | File format version    | uint8     |
-   | Sample name size       | uint16    |
-   | Num samples            | uint32    |
-   | Num probes             | uint32    |
-   | Num channels           | uint8     |
-   | Number format          | uint8     |
-   |------------------------+-----------|
+   |------------------------+-------------|
+   | Element                | Data type   |
+   |------------------------+-------------|
+   | File type magic string | char[ 3 ]   |
+   | File format version    | uint8       |
+   | Sample name size       | uint16      |
+   | Num samples            | uint32      |
+   | Num probes             | uint32      |
+   | Num channels           | uint8       |
+   | Number format          | uint8       |
+   |------------------------+-------------|
 
    The file type magic string is always the ASCII character codes for
    the letters "sim".
@@ -73,8 +73,7 @@
    from Illumina genotyping microarrays.
 
    The number format indicates how the value for each channel is
-   encoded. Permitted values and their meanings are (in SIM version
-   1):
+   encoded. Permitted values and their meanings are (in SIM version 1):
 
    |---------------+-------------------------------------------------------------------------------|
    | Number format | Description                                                                   |
@@ -91,6 +90,7 @@
    |------+-------+-------+-------+-------+-----+-------+-------|
    | name | p0/c0 | p0/c1 | p1/c0 | p1/c1 | ... | pn/c0 | pn/c1 |
    |------+-------+-------+-------+-------+-----+-------+-------|
+
 
    Where "name" is the sample name, padded to <Sample name size>
    bytes, pn is the nth probe on the array) and c0 - cn are the
