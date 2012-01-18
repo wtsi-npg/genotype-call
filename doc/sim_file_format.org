@@ -1,0 +1,115 @@
+#+AUTHOR:    Keith James
+#+EMAIL:     kdj@sanger.ac.uk
+#+DESCRIPTION: A proposal for a simple storage format for array intensities
+#+OPTIONS:   H:6 num:t toc:t \n:nil @:t ::t |:t ^:t -:t f:t *:t <:t
+#+OPTIONS:   TeX:t LaTeX:t skip:nil d:nil todo:t pri:nil tags:nil
+#+LATEX_HEADER: \renewcommand{\familydefault}{\sfdefault}
+#+LaTeX_CLASS_OPTIONS: [a4]
+
+* Introduction
+
+  Genotyping microarray intensity data are produced in a sample-wise
+  fashion, typically as one file per sample. In genotype-calling
+  analysis, the data may need to be addressed either by sample (all
+  probes in a sample are analysed together) or by probe (a probe is
+  analysed across all samples). The latter is inefficient because all
+  sample files must be traversed each time a subset of probes is used.
+
+  This problem has been addressed in the past by aggregating and
+  converting the intensity data into different file formats, some
+  ordered by sample and some by probe. Typically these files also
+  serve as the input for the genotype calling software
+  (e.g. Illuminus, GenoSNP). Following increases in both microarray
+  probe density and sample number, these files have become very large
+  (sometimes approaching 1Tb in total for a large analysis). This has
+  resulted in excessive disk space usage and related I/O during
+  analysis.
+
+  The Simple Intensity Matrix (SIM) format is a proposal for a storage
+  format that addresses the aggregation and size problems.
+
+  
+* Structure
+
+  A SIM file consists of a header section containing metadata,
+  followed by a matrix of binary numeric values in row-major
+  order. All values are stored as little-endian.
+
+** Header
+   
+   The header structure is as follows:
+
+   |------------------------+-----------|
+   | Element                | Data type |
+   |------------------------+-----------|
+   | File type magic string | char\[3\] |
+   | File format version    | uint8     |
+   | Sample name size       | uint16    |
+   | Num samples            | uint32    |
+   | Num probes             | uint32    |
+   | Num channels           | uint8     |
+   | Number format          | uint8     |
+   |------------------------+-----------|
+
+   The file type magic string is always the ASCII character codes for
+   the letters "sim".
+
+   The file format version indicates the version of the SIM format
+   being used (currently 1).
+
+   The sample name size indicates the number of bytes occupied by each
+   sample name stored in the SIM file. Where a sample name is shorter
+   than this, it is padded at the end with NULLs to reach this size.
+
+   The number of samples indicates the number of biological samples
+   represented in the SIM file.
+
+   The number of probes indicates how many probes are present on the
+   array for each sample. Every sample in the SIM file must have the
+   same number of probe data.
+
+   The number of channels indicates the number of data channels (and
+   hence numeric values) per probe. There are 2 channels for raw data
+   from Illumina genotyping microarrays.
+
+   The number format indicates how the value for each channel is
+   encoded. Permitted values and their meanings are (in SIM version
+   1):
+
+   |---------------+-------------------------------------------------------------------------------|
+   | Number format | Description                                                                   |
+   |---------------+-------------------------------------------------------------------------------|
+   |             0 | IEEE-754 32-bit float                                                         |
+   |             1 | 16-bit integer, a scaled fixed point number in the range 0.0-65.535 inclusive |
+   |---------------+-------------------------------------------------------------------------------|
+
+** Body
+
+   The remainder of the file consists of successive blocks of data for
+   each sample.
+  
+   |------+-------+-------+-------+-------+-----+-------+-------|
+   | name | p0/c0 | p0/c1 | p1/c0 | p1/c1 | ... | pn/c0 | pn/c1 |
+   |------+-------+-------+-------+-------+-----+-------+-------|
+
+   Where "name" is the sample name, padded to <Sample name size>
+   bytes, pn is the nth probe on the array) and c0 - cn are the
+   channels of a probe.
+
+   Since the record size is the same for every sample, it is possible
+   to calculate file offsets directly to any data in the file, given
+   the information in the header.
+
+
+* Open questions
+
+** Normalization
+
+   As proposed, a SIM file may contain either normalized or
+   un-normalized intensity values. The only way to store both is to
+   have two files, thereby duplicating the data.
+
+   It is possible to extend the header to contain the
+   platform-specific normalization parameters for each sample (at
+   least for Illumina arrays) and therefore allow normalization on the
+   fly while only raw values are stored in the file.
