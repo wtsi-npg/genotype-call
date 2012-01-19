@@ -103,18 +103,23 @@
       (uint16-scaled 2))))
 
 (defgeneric read-intensities (file &key start end)
+  (:documentation "Read all of the intensities for the next sample
+  from FILE, optionally restricting those returned by START and
+  END. Methods must return two values; a vector of intensities and a
+  string being the corresponding sample name.")
   (:method ((sim sim) &key (start 0) end)
     (with-slots (stream name-size num-samples num-probes num-channels)
         sim
-      (let ((end (or end num-probes))
-            (intensity-size (intensity-size-of sim)))
+      (let* ((end (or end num-probes))
+             (range (- end start))
+             (intensity-size (intensity-size-of sim)))
         (check-arguments (<= start end num-probes) (start end num-probes)
                          "must satisfy start <= end <= number of probes")
         (let ((name-buffer (make-array name-size :element-type 'octet
                                        :initial-element 0))
-              (buffer (make-array (* (- end start) num-channels intensity-size)
+              (buffer (make-array (* range num-channels intensity-size)
                                   :element-type 'octet :initial-element 0))
-              (intensities (make-array (* (- end start) num-channels)
+              (intensities (make-array (* range num-channels)
                                        :element-type 'single-float
                                        :initial-element 0.f0)))
           (unless (= name-size (read-sequence name-buffer stream))
@@ -122,8 +127,9 @@
                    :format-control "failed to read sample name"))
           ;; Maybe seek to start of intensities
           (when (plusp start)
-            (unless (file-position stream (+ (* intensity-size start)
-                                             (file-position stream)))
+            (unless (file-position stream
+                                   (+ (* intensity-size num-channels start)
+                                      (file-position stream)))
               (error 'malformed-file-error :file sim
                      "failed to seek to start of intensity data")))
           (let ((n (read-sequence buffer stream)))
@@ -137,12 +143,15 @@
                do (setf (aref intensities j) (decode-float32le buffer i))))
           ;; Maybe seek to end of intensities
           (when (/= num-probes end)
-            (unless (file-position stream (+ (* intensity-size end)
-                                             (file-position stream)))
+            (unless (file-position stream
+                                   (+ (* intensity-size num-channels
+                                         (- num-probes end))
+                                      (file-position stream)))
               (error 'malformed-file-error :file sim
                      "failed to seek to end of intensity data")))
           (values intensities (string-right-trim
                                '(#\Nul) (octets-to-string name-buffer))))))))
+
 
 (defun read-sim-format (stream buffer)
   (ecase (read-uint8 stream buffer)
@@ -176,11 +185,12 @@
 (defun write-2channel-intensities (snps x-intensities y-intensities
                                    intensity-size xforms stream)
   (declare (optimize (speed 3) (safety 1)))
-  (declare (type simple-vector snps)
+  (declare (type (simple-array snp (*)) snps)
            (type (simple-array uint16 (*)) x-intensities y-intensities)
            (type (integer 2 4) intensity-size))
-  (let ((total-size (* 2 intensity-size (length snps)))
-        (pair-size (* 2 intensity-size)))
+  (let* ((nbytes  (* 2 intensity-size))
+         (total-size (* nbytes (the snp-count (length snps))))
+         (pair-size (* 2 intensity-size)))
     (loop
        with bindata = (make-array total-size :element-type 'octet)
        for snp across snps
@@ -189,7 +199,7 @@
        do (let ((m (1- (snp-index snp))))
             (multiple-value-bind (xnorm ynorm)
                 (normalize (aref x-intensities m) (aref y-intensities m)
-                           (svref xforms (snp-norm-rank snp)))              
+                           (svref xforms (snp-norm-rank snp)))
               (encode-float32le xnorm bindata j)
               (encode-float32le ynorm bindata k)))
        finally (return (write-sequence bindata stream)))))

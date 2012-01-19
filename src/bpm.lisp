@@ -27,6 +27,12 @@
   "The default size (number of SNPs) per manifest assumed prior to
   parsing. Vectors created while parsing start at this size.")
 
+(deftype snp-count ()
+  "SNP index type denoting the possible range of number of SNPs per
+  microarray. This value is set at an order of magnitiude larger than
+  the largest chip currently available."
+  '(and fixnum (integer 0 100000000)))
+
 (defstruct (snp (:constructor make-snp (index name chromosome position
                                         alleles ilmn-strand cust-strand
                                         norm-id)))

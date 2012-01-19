@@ -19,11 +19,31 @@
 
 (in-package :uk.ac.sanger.genotype-call)
 
-(defgeneric copy-intensities (from to metadata &key key test)
+(defgeneric copy-intensities (from to metadata &key test key)
   (:documentation "Copies microarray intensity data FROM sources such
-  as GTC or SIM files TO a destination such as a SIM or genotype
-  caller input file. The METADATA argument is used to provide
-  additional information required during the operation."))
+as GTC or SIM files TO a destination such as a SIM or genotype caller
+input file. The METADATA argument is used to provide additional
+information required during the operation.
+
+Arguments:
+
+- from (object): A producer of intensity data, such as a GTC object
+  SIM object or a Lisp stream.
+- to (object): A consumer of intensity data, such as a SIM object or
+  Lisp stream.
+- metadata (object): Metadata used to identify SNPs and samples, for
+  example a BeadPool Manifest (BPM object).
+
+Key:
+
+- test (predicate): A test predicate used against the metadata to
+  select intensities for inclusion in the output.
+- key (function): A function used to transform metadata elements
+  before applying TEST.
+
+Returns:
+
+- to (object)."))
 
 (defmethod copy-intensities :before ((gtc gtc) (sim sim) (snps vector)
                                      &key key test)
@@ -60,7 +80,8 @@
       (dotimes (n (- name-size (length sample-name))) ; pad the name
         (write-byte 0 stream))
       (write-2channel-intensities snps x-intensities y-intensities
-                                  isize xforms stream))))
+                                  isize xforms stream)))
+  sim)
 
 (defmethod copy-intensities :after ((gtc gtc) (sim sim) (snps vector)
                                     &key key test)
@@ -73,8 +94,8 @@
                              &key key test)
   (copy-intensities gtc sim (snps-of manifest :key key :test test)))
 
-(defmethod copy-intensities ((sim sim) (manifest bpm) stream
-                             &key key test)
+(defmethod copy-intensities ((sim sim) stream (manifest bpm)
+                             &key key test (start 0) end)
   (with-slots (num-samples num-probes num-channels)
       sim
     (let ((snps (snps-of manifest :key key :test test)))
@@ -82,26 +103,28 @@
                        "~d annotations were selected for ~d probes"
                        (length snps) num-probes)
       (let ((sample-names (make-array num-samples))
-            (sample-intensities (make-array (* num-probes num-channels))))
+            (intensities (make-array num-samples)))
         (loop
            for i from 0 below num-samples
-           do (multiple-value-bind (intensities name)
-                  (read-intensities sim)
+           do (multiple-value-bind (sample-intensities name)
+                  (read-intensities sim :start start :end end)
+                (princ ".")
                 (setf (svref sample-names i) name
-                      (svref sample-intensities i) intensities)))
-        (write-illuminus-header sample-names stream)
-        (loop
-           for i from 0 below num-probes
-           for j from 0 by num-channels
-           do (progn
-                (write-illuminus-snp (svref snps i) stream)
-                (loop
-                   for k from 0 below num-samples
-                   do (let ((intensities (svref sample-intensities k)))
-                        (write-illuminus-intensities
-                         (aref intensities j) (aref intensities (1+ j))
-                         stream)))
-                (terpri stream)))))))
+                      (svref intensities i) sample-intensities)))
+        (let ((*print-pretty* nil))
+          (write-illuminus-header sample-names stream)
+          (loop
+             for i from start below end by num-channels
+             for j = (1+ i)
+             do (progn
+                  (write-illuminus-snp (svref snps i) stream)
+                  (loop
+                     for sample-intensities across intensities
+                     do (write-illuminus-intensities
+                         (aref sample-intensities i) (aref sample-intensities j)
+                         stream)
+                     finally (terpri stream))))))))
+  stream)
 
 (defgeneric gtc-to-sim (sim-filespec manifest gtc-filespecs &key test key)
   (:documentation "Creates a new SIM file containing the aggregated
@@ -121,5 +144,9 @@ intensity data from a list of GTC files.")
                                    "manifest ~s does not match previous ~
                                   manifest ~s" manifest-name
                                   prev-manifest-name)))
-            (copy-intensities gtc sim snps)))))))
+            (copy-intensities gtc sim snps))))
+      sim)))
 
+;; (defgeneric sim-to-illuminus (illuminus-filespec manifest sim-filespecs
+;;                                                  &key test key)
+;;   )
