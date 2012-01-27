@@ -38,7 +38,8 @@
                                      (:file "bpm")
                                      (:file "sim")
                                      (:file "illuminus")
-                                     (:file "intensity-processing")))
+                                     (:file "intensity-processing")
+                                     (:file "genotype-call-cli")))
                (:lift-test-config :lift-tests
                                   :pathname "genotype-call-test"
                                   :target-system :genotype-call)))

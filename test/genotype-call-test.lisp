@@ -19,8 +19,47 @@
 
 (in-package :uk.ac.sanger.genotype-call-test)
 
+(defparameter *possible-alleles*
+  '("AA" "AC" "AG" "AT" "CC" "CG" "GC" "GG" "TA" "TC" "TG" "TT" "DI" "ID" "NA"))
+
+(defparameter *possible-strands*
+  '("Bot" "BOT" "M" "MINUS" "P" "PLUS" "Top" "TOP"))
+
 (defparameter *example-snp-counts*
-  '(("16" 4) ("2" 4) ("9" 2)))
+    '(("16" 4) ("2" 4) ("9" 2)))
+
+;; To check the SIM file contents:
+;;
+;;  hexdump -v -s 16 -e '1/255 "%s" ": " 20/4 " %0.12f" "\n"' example.sim
+;;
+(defparameter *sim-intensities-hexdump*
+  '(0.034164227545 0.074980102479
+                   0.180595964193 0.046113856137
+                   1.067971110344 0.008573265746
+                   0.891155481339 0.873829364777
+                   0.600366592407 0.002887635026
+                   1.005514144897 0.987805783749
+                   -0.000895529287 1.537799477577
+                   0.014101119712 0.762843370438
+                   0.712541103363 0.023448554799
+                   0.901769757271 1.160114407539))
+
+(defun round-float (f)
+  (let ((fact (expt 10 9)))
+    (/ (fround (* fact f)) fact)))
+
+(defun compare-intensities (expected observed)
+  (ensure (= (length expected) (length observed))
+          :report "intensity sequences were not the same length: ~a ~a"
+          :arguments (expected observed))
+  (mapcar (lambda (x y)
+            (let ((rx (round-float x))
+                  (ry (round-float y)))
+              (ensure (= rx ry)
+                      :report "intensity comparison failed: ~a (rounded to ~a) != ~a (rounded to ~a)"
+                      :arguments (x rx y ry))))
+          expected (coerce observed 'list)))
+
 
 (deftestsuite genotype-call-tests ()
   ())
@@ -38,6 +77,41 @@
                                                    :test (lambda (x)
                                                            (string= chr x))))
                                     chrs))))))
+
+(addtest (genotype-call-tests) read-bpm/2
+  (with-open-file (stream (merge-pathnames "data/example_unsorted.bpm.csv"))
+    (ensure (read-bpm stream :strict-ordering nil)))
+  (with-open-file (stream (merge-pathnames "data/example_unsorted.bpm.csv"))
+    (ensure-condition (malformed-file-error)
+      (read-bpm stream :strict-ordering t))))
+
+(addtest (genotype-call-tests) normalize-alleles/1
+  (dolist (alleles *possible-alleles*)
+    (dolist (strand (remove-duplicates
+                     (mapcar (lambda (str)
+                               (genotype-call::parse-strand nil str))
+                             *possible-strands*)))
+      (let ((norm (genotype-call::normalize-alleles alleles strand)))
+        (cond ((string= "NA" norm)
+               nil)
+              ((eql #\B strand)
+               (ensure (string= (map 'simple-string
+                                     #'genotype-call::complement-allele
+                                     alleles) norm)))
+              (t
+               (string= alleles norm)))))))
+
+(addtest (genotype-call-tests) valid-alleles-p/1
+  (ensure (every #'valid-alleles-p *possible-alleles*)))
+
+(addtest (genotype-call-tests) make-chromosome-p/1
+  (with-open-file (stream (merge-pathnames "data/example.bpm.csv"))
+    (let ((manifest (read-bpm stream))
+          (chrs (mapcar #'first *example-snp-counts*)))
+      (dolist (chr chrs)
+        (let ((pred (make-chromosome-p manifest chr #'string=)))
+          (ensure (funcall pred chr))
+          (ensure (not (funcall pred "NOT A VALID CHROMOSOME"))))))))
 
 (addtest (genotype-call-tests) gtc-open/close/1
   (with-open-file (stream (merge-pathnames "data/example.gtc")
@@ -140,6 +214,13 @@
       (ensure (= 1 (version-of sim)))
       (ensure (sim-close sim)))))
 
+(addtest (genotype-call-tests) sim-closed-stream/1
+  (ensure-condition (invalid-operation-error)
+    (make-instance 'sim :stream (with-open-file
+                                    (stream (merge-pathnames "data/example.sim")
+                                            :element-type 'octet)
+                                  stream))))
+
 (addtest (genotype-call-tests) with-sim/1
   (with-sim (sim (merge-pathnames "data/example.sim"))
     (ensure sim)
@@ -149,3 +230,35 @@
     (ensure (= 10 (num-probes-of sim)))
     (ensure (= 2 (num-channels-of sim)))
     (ensure (eql 'single-float (format-of sim)))))
+
+(addtest (genotype-call-tests) read-intensities/1
+  (with-sim (sim (merge-pathnames "data/example.sim"))
+    (dotimes (n (num-samples-of sim))
+      (multiple-value-bind (intensities sample-name)
+          (read-intensities sim)
+        (compare-intensities *sim-intensities-hexdump* intensities)
+        (ensure (string= "test_sample" sample-name))))
+    ;; Should be at eof
+    (ensure (null (read-byte (stream-of sim) nil nil)))))
+
+(addtest (genotype-call-tests) read-intensities/2
+  ;; :start argument only
+  (loop
+     for i from 0 below 10
+     do (with-sim (sim (merge-pathnames "data/example.sim"))
+          (compare-intensities (subseq *sim-intensities-hexdump* (* 2 i))
+                               (read-intensities sim :start i))))
+  ;; :end argument only
+  (loop
+     for i from 0 below 10
+     do (with-sim (sim (merge-pathnames "data/example.sim"))
+          (compare-intensities (subseq *sim-intensities-hexdump* 0 (* 2 i))
+                               (read-intensities sim :end i))))
+  ;; both :start and :end arguments
+  (loop
+     for i from 0 below 8
+     for j from 2 below 10
+     do (with-sim (sim (merge-pathnames "data/example.sim"))
+          (compare-intensities
+           (subseq *sim-intensities-hexdump* (* 2 i) (* 2 j))
+           (read-intensities sim :start i :end j)))))

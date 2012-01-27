@@ -25,17 +25,23 @@
   (:export
    
    #:*xform-fields*
+
+   ;; CLI
+   #:cli
    
    ;; BPM
+   #:bpm
    #:read-bpm
    #:alleles-of
    #:chromosomes-of
    #:snps-of
    #:num-snps-of
+   #:valid-alleles-p
 
    #:make-chromosome-p
 
    ;; SNP
+   #:snp
    #:snp-index
    #:snp-name
    #:snp-chromosome
@@ -47,6 +53,7 @@
    #:snp-norm-rank
    
    ;; GTC
+   #:gtc
    #:with-gtc
    #:gtc-open
    #:gtc-close
@@ -56,6 +63,7 @@
    #:normalize
 
    ;; SIM
+   #:sim
    #:with-sim
    #:sim-open
    #:sim-close
@@ -65,6 +73,7 @@
    #:num-channels-of
    #:format-of
 
+   #:read-intensities
    #:copy-intensities
 
    ;; Utilities
