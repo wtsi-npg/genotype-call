@@ -128,8 +128,12 @@ alist XFORM."
            (y1 (- y offset-y))
            (x2 (+ (* (cos theta) x1) (* (sin theta) y1)))
            (y2 (+ (* (- (sin theta)) x1) (* (cos theta) y1)))
-           (x3 (- x2 (* shear y2))))
-      (values (/ x3 scale-x) (/ y2 scale-y)))))
+           (x3 (- x2 (* shear y2)))
+           (normx (/ x3 scale-x))
+           (normy (/ y2 scale-y)))
+      ;; Eliminate negative values
+      (values (if (minusp normx) 0.f0 normx)
+              (if (minusp normy) 0.f0 normy)))))
 
 (defun read-gtc-toc (stream buffer)
   "Reads the GTC table of contents fom STREAM as a simple-array."
