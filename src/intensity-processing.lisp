@@ -45,6 +45,7 @@ Returns:
 
 - to (object)."))
 
+;; Implementation of GTC -> SIM with SNP vector metadata
 (defmethod copy-intensities :before ((gtc gtc) (sim sim) (snps vector)
                                      &key key test)
   (declare (ignorable key test))
@@ -90,16 +91,20 @@ Returns:
       sim
     (incf num-samples)))
 
+;;; Implementation of GTC -> SIM with SNP manifest metadata
 (defmethod copy-intensities ((gtc gtc) (sim sim) (manifest bpm)
                              &key key test)
   (copy-intensities gtc sim (snps-of manifest :key key :test test)))
 
-(defmethod copy-intensities ((sim sim) stream (manifest bpm)
+;;; Implementation of SIM -> Illuminus with SNP vector metadata
+(defmethod copy-intensities ((sim sim) stream (snps vector)
                              &key key test (start 0) end)
   (with-slots (num-samples num-probes num-channels)
       sim
-    (let ((snps (snps-of manifest :key key :test test)))
-      (check-arguments (= num-probes (length snps)) (sim manifest key test)
+    (let ((snps (if test
+                    (remove-if test snps :key key)
+                    snps)))
+      (check-arguments (= num-probes (length snps)) (sim snps key test)
                        "~d annotations were selected for ~d probes"
                        (length snps) num-probes)
       (let ((sample-names (make-array num-samples))
@@ -108,23 +113,32 @@ Returns:
            for i from 0 below num-samples
            do (multiple-value-bind (sample-intensities name)
                   (read-intensities sim :start start :end end)
-                (princ ".")
                 (setf (svref sample-names i) name
                       (svref intensities i) sample-intensities)))
+        ;; Should check here that all the intensity vectors are the
+        ;; same length
         (let ((*print-pretty* nil))
           (write-illuminus-header sample-names stream)
           (loop
-             for i from start below end by num-channels
-             for j = (1+ i)
+             for i from start below num-probes
+             for j = (* 2 i)
+             for snp across snps
              do (progn
-                  (write-illuminus-snp (svref snps i) stream)
+                  (write-illuminus-snp snp stream)
                   (loop
                      for sample-intensities across intensities
                      do (write-illuminus-intensities
-                         (aref sample-intensities i) (aref sample-intensities j)
+                         (aref sample-intensities j)
+                         (aref sample-intensities (1+ j))
                          stream)
                      finally (terpri stream))))))))
   stream)
+
+;;; Implementation of SIM -> Illuminus with SNP manifest metadata
+(defmethod copy-intensities ((sim sim) stream (manifest bpm)
+                             &key key test (start 0) end)
+  (copy-intensities sim stream (snps-of manifest :key key :test test)
+                    :start start :end end))
 
 (defgeneric gtc-to-sim (sim-filespec manifest gtc-filespecs &key test key)
   (:documentation "Creates a new SIM file containing the aggregated
@@ -147,6 +161,14 @@ intensity data from a list of GTC files.")
             (copy-intensities gtc sim snps))))
       sim)))
 
-;; (defgeneric sim-to-illuminus (illuminus-filespec manifest sim-filespecs
-;;                                                  &key test key)
-;;   )
+(defgeneric sim-to-illuminus (illuminus-filespec manifest sim-filespec
+                                                 &key test key)
+  (:method (illuminus-filespec (manifest bpm) sim-filespec &key test key)
+    (with-sim (sim sim-filespec)
+      (let ((snps (snps-of manifest :test test :key key)))
+        (with-open-file (illuminus illuminus-filespec :direction :output
+                                   :external-format :ascii
+                                   :if-exists :supersede
+                                   :if-does-not-exist :create)
+          (copy-intensities sim illuminus snps)
+          illuminus)))))
