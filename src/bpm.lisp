@@ -59,7 +59,7 @@ Beadpool Manifest."
   (with-slots (snps)
       manifest
     (setf snps (stable-sort
-                (normalize-allele-strands (rank-norm-ids snps)) #'location<))))
+                (normalize-snp-alleles (rank-norm-ids snps)) #'location<))))
 
 (defmethod print-object ((manifest bpm) stream)
   (print-unreadable-object (manifest stream :type t :identity nil)
@@ -102,21 +102,30 @@ Beadpool Manifest."
   (:method ((manifest bpm) &key key test)
     (length (snps-of manifest :key key :test test))))
 
-(defun cnv-probe-p (name)
-  (starts-with-string-p name "cnv"))
+(defun cnv-probe-p (probe-name)
+  "Returns T if the PROBE-NAME indicates a copy-number variation (CNV)
+probe."
+  (starts-with-string-p probe-name "cnv"))
 
-(defun make-chromosome-p (manifest chromosome pred)
+(defun make-chromosome-p (manifest chromosome predicate)
+  "Makes a new predicate that accepts a CHROMOSOME as an argument and
+returns the result of testing CHROMOSOME with PREDICATE. CHROMOSOME
+must be represneted in MANIFEST."
   (with-slots (chromosomes)
       manifest
-    (check-arguments (member chromosome chromosomes :test pred)
+    (check-arguments (member chromosome chromosomes :test predicate)
                      (chromosome)
                      "invalid chromosome, expected one of ~a"
                      chromosomes))
-  (let ((pred (if (functionp pred)
-                  pred
-                  (fdefinition pred))))
+  (let ((predicate (if (functionp predicate)
+                       predicate
+                       (fdefinition predicate))))
     (lambda (arg)
-      (funcall pred chromosome arg))))
+      (funcall predicate chromosome arg))))
+
+(defun load-bpm (filespec &key strict-ordering)
+  (with-open-file (stream filespec :external-format :ascii)
+    (read-bpm stream :strict-ordering strict-ordering)))
 
 (defun read-bpm (stream &key (strict-ordering t))
   "Returns a new BPM object from read STREAM."
@@ -201,29 +210,55 @@ B (BOT), - (MINUS) or + (PLUS)."
                 :record str))))
 
 (defun nucleotidep (c)
+  "Returns T if character C represents a nucleotide base."
   (or (char= #\A c) (char= #\C c) (char= #\G c) (char= #\T c)))
 
-(defun complement-nucleotide (c)
+(defun complement-allele (c)
+  "Returns a character representing the allele on the complementary
+strand to allele character C."
   (ecase c
     (#\A #\T)
     (#\C #\G)
     (#\G #\C)
-    (#\T #\A)))
+    (#\T #\A)
+    (#\D #\I)
+    (#\I #\D)))
 
 (defun valid-alleles-p (str)
+  "Returns T if STR is a valid manifest allele string."
   (or (string= "NA" str) (string= "DI" str) (string= "ID" str)
       (every #'nucleotidep str)))
 
-(defun normalize-allele-strands (snps)
+;; The complete set of Ilmn_strand values across all the manifests that I
+;; have available is somewhat variable, being:
+;; { Bot BOT M MINUS P PLUS Top TOP }
+;;
+;; The complete set of allele values across all the manifests that I
+;; have available is:
+;; { [A/A] [A/C] [A/G] [A/T] [C/C] [C/G] [G/C] [G/G]
+;;   [T/A] [T/C] [T/G] [T/T]
+;;   [D/I] [I/D] [N/A] }
+
+(defun normalize-snp-alleles (snps)
+  "Modifies SNPs by applying NORMALIZE-ALLELES to each one."
   (loop
      for snp across snps
-     do (ecase (snp-ilmn-strand snp)
-          ((#\T #\+ #\-) snp)
-          (#\B (let ((norm (map 'simple-string #'complement-nucleotide
-                                (snp-alleles snp))))
-                 (setf (snp-alleles snp) norm
-                       (snp-ilmn-strand snp) #\T))))
+     do (let ((norm (normalize-alleles (snp-alleles snp)
+                                       (snp-ilmn-strand snp))))
+          (if (string= (snp-alleles snp) norm)
+              snp
+              (setf (snp-alleles snp) norm
+                    (snp-ilmn-strand snp) #\T)))
      finally (return snps)))
+
+(defun normalize-alleles (alleles strand)
+  "Returns a string representing ALLELES, normalizing to the TOP
+strand."
+  (if (string= "NA" alleles)
+      alleles
+      (ecase strand
+        ((#\T #\+ #\-) alleles)
+        (#\B (map 'simple-string #'complement-allele alleles)))))
 
 (defun location< (snp1 snp2)
   (let ((chr1 (snp-chromosome snp1))
