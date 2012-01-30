@@ -72,9 +72,12 @@
    #:num-probes-of
    #:num-channels-of
    #:format-of
-
    #:read-intensities
+
+   ;; Intensity processing
    #:copy-intensities
+   #:gtc-to-sim
+   #:sim-to-illuminus
 
    ;; Utilities
    #:version-of)
