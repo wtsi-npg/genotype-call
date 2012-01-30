@@ -22,6 +22,19 @@
 ;;; Illuminus input format
 ;;; SNP Coor Alleles 1A 1B 2A 2B ... nA nB
 
+(defclass iln ()
+  ((stream :initform nil :initarg :stream :reader stream-of
+           :documentation "The Illuminus intensities stream."))
+  (:documentation "Illuminus format intensities."))
+
+(defmethod print-object ((iln iln) stream)
+  (print-unreadable-object (iln stream :type t :identity nil)
+    (with-slots (stream)
+        iln
+      (format stream "~@[~a ~]Illuminus intensities"
+              (when (subtypep (type-of stream) 'file-stream)
+                (file-namestring stream))))))
+
 (defun write-illuminus-header (sample-names stream)
   (write-string "SNP" stream)
   (write-char #\Tab stream)
