@@ -97,7 +97,7 @@ Returns:
   (copy-intensities gtc sim (snps-of manifest :key key :test test)))
 
 ;;; Implementation of SIM -> Illuminus with SNP vector metadata
-(defmethod copy-intensities ((sim sim) stream (snps vector)
+(defmethod copy-intensities ((sim sim) (iln iln) (snps vector)
                              &key key test (start 0) end)
   (with-slots (num-samples num-probes num-channels)
       sim
@@ -117,7 +117,8 @@ Returns:
                       (svref intensities i) sample-intensities)))
         ;; Should check here that all the intensity vectors are the
         ;; same length
-        (let ((*print-pretty* nil))
+        (let ((stream (stream-of iln))
+              (*print-pretty* nil))
           (write-illuminus-header sample-names stream)
           (loop
              for i from start below num-probes
@@ -132,12 +133,12 @@ Returns:
                          (aref sample-intensities (1+ j))
                          stream)
                      finally (terpri stream))))))))
-  stream)
+  iln)
 
 ;;; Implementation of SIM -> Illuminus with SNP manifest metadata
-(defmethod copy-intensities ((sim sim) stream (manifest bpm)
+(defmethod copy-intensities ((sim sim) (iln iln) (manifest bpm)
                              &key key test (start 0) end)
-  (copy-intensities sim stream (snps-of manifest :key key :test test)
+  (copy-intensities sim (stream-of iln) (snps-of manifest :key key :test test)
                     :start start :end end))
 
 (defgeneric gtc-to-sim (sim-filespec manifest gtc-filespecs &key test key)
@@ -166,9 +167,8 @@ intensity data from a list of GTC files.")
   (:method (illuminus-filespec (manifest bpm) sim-filespec &key test key)
     (with-sim (sim sim-filespec)
       (let ((snps (snps-of manifest :test test :key key)))
-        (with-open-file (illuminus illuminus-filespec :direction :output
-                                   :external-format :ascii
-                                   :if-exists :supersede
-                                   :if-does-not-exist :create)
-          (copy-intensities sim illuminus snps)
-          illuminus)))))
+        (with-open-file (stream illuminus-filespec :direction :output
+                                :external-format :ascii
+                                :if-exists :supersede
+                                :if-does-not-exist :create)
+          (copy-intensities sim (make-instance 'iln :stream stream) snps))))))
