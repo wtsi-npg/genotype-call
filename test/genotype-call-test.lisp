@@ -262,3 +262,50 @@
           (compare-intensities
            (subseq *sim-intensities-hexdump* (* 2 i) (* 2 j))
            (read-intensities sim :start i :end j)))))
+
+(addtest (genotype-call-tests) read-intensities/3
+  ;; single intensity channel set
+  (with-sim (sim (merge-pathnames "data/example.sim"))
+    (ensure (= (num-channels-of sim)
+               (length (read-intensities sim :start 0 :end 1)))))
+  ;; start < 0
+  (with-sim (sim (merge-pathnames "data/example.sim"))
+    (ensure-condition (invalid-argument-error)
+      (read-intensities sim :start -1)))
+  ;; end == start
+  (with-sim (sim (merge-pathnames "data/example.sim"))
+    (let ((intensities (read-intensities sim :start 0 :end 0)))
+      (ensure (vectorp intensities))
+      (ensure (zerop (length intensities)))))
+   ;; end < start
+   (with-sim (sim (merge-pathnames "data/example.sim"))
+     (ensure-condition (invalid-argument-error)
+       (read-intensities sim :start 0 :end -1))))
+
+(addtest (genotype-call-tests) sim-to-illuminus/1
+  (flet ((read-lines (filespec)
+           (with-open-file (stream filespec)
+             (loop
+                for line = (read-line stream nil nil)
+                while line
+                collect line))))
+    (handler-bind ((error #'leave-tmp-pathname))
+      (with-tmp-pathname (tmp-sim :tmpdir (merge-pathnames "data") :type "sim")
+        (with-open-file (stream (merge-pathnames "data/example.bpm.csv"))
+        (let ((manifest (read-bpm stream))
+              (count 5))
+          (with-sim (sim tmp-sim :direction :output :if-exists :supersede
+                         :if-does-not-exist :create)
+            (dotimes (n count)
+              (with-gtc (gtc (merge-pathnames "data/example.gtc"))
+                (copy-intensities gtc sim manifest))))
+          (with-tmp-pathname (tmp-iln :tmpdir (merge-pathnames "data")
+                                      :type "iln")
+            (let ((iln (sim-to-illuminus tmp-iln manifest tmp-sim)))
+              (ensure iln))
+            (let ((expected (read-lines (merge-pathnames
+                                         "data/example.iln")))
+                  (observed (read-lines tmp-iln)))
+              (ensure (equalp observed expected)
+                      :report "expected ~a but found ~a"
+                      :arguments (expected observed))))))))))
