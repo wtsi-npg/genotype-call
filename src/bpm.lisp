@@ -102,6 +102,25 @@ Beadpool Manifest."
   (:method ((manifest bpm) &key key test)
     (length (snps-of manifest :key key :test test))))
 
+(defgeneric has-chromosome-p (manifest chromosome)
+  (:documentation "Returns T if CHROMOSOME is present in MANIFEST.")
+  (:method has-chromosome-p ((manifest bpm) (chromosome string))
+           (member chromosome (slot-value manifest 'chromosomes)
+                   :test #'string=)))
+
+(defgeneric chromosome-boundaries (manifest chromosome)
+  (:documentation "Returns two values, being the indices of the first
+  and last SNPs on CHROMOSOME in MANIFEST.")
+  (:method ((manifest bpm) (chromosome string))
+    (check-arguments (has-chromosome-p manifest chromosome)
+                     (chromosome)
+                     "expected one of ~a" (chromosomes-of manifest))
+    (let ((snps (snps-of manifest)))
+      (values
+       (position chromosome snps :test #'string= :key #'snp-chromosome)
+       (position chromosome snps :test #'string= :key #'snp-chromosome
+                 :from-end t)))))
+
 (defun cnv-probe-p (probe-name)
   "Returns T if the PROBE-NAME indicates a copy-number variation (CNV)
 probe."
@@ -110,13 +129,12 @@ probe."
 (defun make-chromosome-p (manifest chromosome predicate)
   "Makes a new predicate that accepts a CHROMOSOME as an argument and
 returns the result of testing CHROMOSOME with PREDICATE. CHROMOSOME
-must be represneted in MANIFEST."
+must be represented in MANIFEST."
   (with-slots (chromosomes)
       manifest
     (check-arguments (member chromosome chromosomes :test predicate)
                      (chromosome)
-                     "invalid chromosome, expected one of ~a"
-                     chromosomes))
+                     "expected one of ~a" chromosomes))
   (let ((predicate (if (functionp predicate)
                        predicate
                        (fdefinition predicate))))

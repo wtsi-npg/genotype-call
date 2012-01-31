@@ -75,7 +75,9 @@
   (multiple-value-bind (oargs initargs)
       (remove-key-values '(:version :name-size :num-probes
                            :num-samples :num-channels :format) args)
-    (let ((stream (apply #'open filespec :element-type 'octet oargs)))
+    (let ((stream (if (streamp filespec)
+                      filespec
+                      (apply #'open filespec :element-type 'octet oargs))))
       (apply #'make-instance 'sim :stream stream (flatten initargs)))))
 
 (defun sim-close (sim)
@@ -108,6 +110,7 @@
   END. Methods must return two values; a vector of intensities and a
   string being the corresponding sample name.")
   (:method ((sim sim) &key (start 0) end)
+    (check-arguments (not (minusp start)) (start) "value may not be negative")
     (with-slots (stream name-size num-samples num-probes num-channels)
         sim
       (let* ((end (or end num-probes))

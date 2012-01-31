@@ -138,11 +138,15 @@ designating a CLI class."
                           (output (option-value 'output parsed-args))
                           (manifest (load-bpm
                                      (option-value 'manifest parsed-args)))
-                          (chromosome (option-value 'chromosome parsed-args)))
+                          (chromosome (option-value 'chromosome parsed-args))
+                          (start (option-value 'start parsed-args))
+                          (end (option-value 'end parsed-args)))
                       (if chromosome
+                          (multiple-value-bind (cstart cend)
+                              (chromosome-boundaries manifest chromosome)
+                            (sim-to-illuminus output manifest input
+                                              :start (+ cstart start)
+                                              :end (min cend (+ cstart end))))
                           (sim-to-illuminus output manifest input
-                                            :test (make-chromosome-p
-                                                   manifest chromosome
-                                                   #'string=)
-                                            :key #'snp-chromosome)
-                          (sim-to-illuminus output manifest input)))))
+                                            :start start :end end)))))
+

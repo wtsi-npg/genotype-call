@@ -103,7 +103,8 @@ Returns:
       sim
     (let ((snps (if test
                     (remove-if test snps :key key)
-                    snps)))
+                    snps))
+          (end (or end num-probes)))
       (check-arguments (= num-probes (length snps)) (sim snps key test)
                        "~d annotations were selected for ~d probes"
                        (length snps) num-probes)
@@ -120,13 +121,15 @@ Returns:
         (let ((stream (stream-of iln))
               (*print-pretty* nil))
           (write-illuminus-header sample-names stream)
+          ;; For each SNP
           (loop
-             for i from start below num-probes
-             for j = (* 2 i)
-             for snp across snps
+             for i from 0 below end     ; probe index, offset to 0
+             for j = (* 2 i)            ; intensity index, in pairs
+             for k = start then (1+ k)  ; SNP index, not offset
              do (progn
-                  (write-illuminus-snp snp stream)
-                  (loop
+                  ;; Write this SNP's intensities for all samples
+                  (write-illuminus-snp (svref snps k) stream)
+                  (loop                
                      for sample-intensities across intensities
                      do (write-illuminus-intensities
                          (aref sample-intensities j)
@@ -135,10 +138,24 @@ Returns:
                      finally (terpri stream))))))))
   iln)
 
+(defun num-intensities (intensities)
+  (let ((lengths (map 'list #'length intensities)))
+    (cond ((null lengths)
+           0)
+          ((every (lambda (x)
+                    (= (first lengths) x)) lengths)
+           (first lengths))
+          (t
+           (error 'invalid-operation-error
+                  :format-control "intensity vectors were different ~
+                                   lengths: ~a"
+                  :format-arguments (list lengths))))))
+
+
 ;;; Implementation of SIM -> Illuminus with SNP manifest metadata
 (defmethod copy-intensities ((sim sim) (iln iln) (manifest bpm)
                              &key key test (start 0) end)
-  (copy-intensities sim (stream-of iln) (snps-of manifest :key key :test test)
+  (copy-intensities sim iln (snps-of manifest :key key :test test)
                     :start start :end end))
 
 (defgeneric gtc-to-sim (sim-filespec manifest gtc-filespecs &key test key)
@@ -163,12 +180,13 @@ intensity data from a list of GTC files.")
       sim)))
 
 (defgeneric sim-to-illuminus (illuminus-filespec manifest sim-filespec
-                                                 &key test key)
-  (:method (illuminus-filespec (manifest bpm) sim-filespec &key test key)
+                              &key test key start end)
+  (:method (illuminus-filespec (manifest bpm) sim-filespec
+            &key test key (start 0) end)
     (with-sim (sim sim-filespec)
-      (let ((snps (snps-of manifest :test test :key key)))
-        (with-open-file (stream illuminus-filespec :direction :output
-                                :external-format :ascii
-                                :if-exists :supersede
-                                :if-does-not-exist :create)
-          (copy-intensities sim (make-instance 'iln :stream stream) snps))))))
+      (with-open-file (stream illuminus-filespec :direction :output
+                              :external-format :ascii
+                              :if-exists :supersede
+                              :if-does-not-exist :create)
+        (copy-intensities sim (make-instance 'iln :stream stream) manifest
+                          :key key :test test :start start :end end)))))

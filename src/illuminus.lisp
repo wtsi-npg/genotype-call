@@ -29,11 +29,11 @@
 
 (defmethod print-object ((iln iln) stream)
   (print-unreadable-object (iln stream :type t :identity nil)
-    (with-slots (stream)
+    (with-slots ((s stream))
         iln
       (format stream "~@[~a ~]Illuminus intensities"
-              (when (subtypep (type-of stream) 'file-stream)
-                (file-namestring stream))))))
+              (when (subtypep (type-of s) 'file-stream)
+                (file-namestring s))))))
 
 (defun write-illuminus-header (sample-names stream)
   (write-string "SNP" stream)
