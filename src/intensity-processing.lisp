@@ -105,6 +105,12 @@ Returns:
                     (remove-if test snps :key key)
                     snps))
           (end (or end num-probes)))
+      (check-arguments (and (integerp start) (not (minusp start))) (start)
+                       "expected a non-negative integer")
+      (check-arguments (and (integerp end) (not (minusp end))) (end)
+                       "expected a non-negative integer")
+      (check-arguments (<= 0 start end) (start end)
+                       "start and end must satisfy 0 <= start <= end")
       (check-arguments (= num-probes (length snps)) (sim snps key test)
                        "~d annotations were selected for ~d probes"
                        (length snps) num-probes)
@@ -184,9 +190,13 @@ intensity data from a list of GTC files.")
   (:method (illuminus-filespec (manifest bpm) sim-filespec
             &key test key (start 0) end)
     (with-sim (sim sim-filespec)
-      (with-open-file (stream illuminus-filespec :direction :output
-                              :external-format :ascii
-                              :if-exists :supersede
-                              :if-does-not-exist :create)
+      (if (streamp illuminus-filespec)
+          (copy-intensities sim (make-instance 'iln :stream illuminus-filespec)
+                            manifest :key key :test test
+                            :start start :end end)
+          (with-open-file (stream illuminus-filespec :direction :output
+                                  :external-format :ascii
+                                  :if-exists :supersede
+                                  :if-does-not-exist :create)
         (copy-intensities sim (make-instance 'iln :stream stream) manifest
-                          :key key :test test :start start :end end)))))
+                          :key key :test test :start start :end end))))))

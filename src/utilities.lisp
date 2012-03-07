@@ -84,3 +84,13 @@ changed, is restored on leaving."
              :format-control "only read ~d of ~d expected bytes"
              :format-arguments (list num-bytes record-size)))
     buffer))
+
+(defun maybe-standard-stream (name)
+  "Returns a standard stream if NAME is STRING-EQUAL to one of
+\"stdin\" or \"stdout\", otherwise returns NAME."
+  (cond ((string-equal "stdin" name)
+         *standard-input*)
+        ((string-equal "stdout" name)
+         *standard-output*)
+        (t
+         name)))

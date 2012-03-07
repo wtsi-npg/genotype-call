@@ -134,12 +134,14 @@ designating a CLI class."
 (register-command "sim-to-illuminus" 'sim-to-illuminus-cli
                   (lambda (parsed-args &optional other)
                     (declare (ignorable other))
-                    (let ((input (option-value 'input parsed-args))
-                          (output (option-value 'output parsed-args))
+                    (let ((input (maybe-standard-stream
+                                  (option-value 'input parsed-args)))
+                          (output (maybe-standard-stream
+                                   (option-value 'output parsed-args)))
                           (manifest (load-bpm
                                      (option-value 'manifest parsed-args)))
                           (chromosome (option-value 'chromosome parsed-args))
-                          (start (option-value 'start parsed-args))
+                          (start (or (option-value 'start parsed-args) 0))
                           (end (option-value 'end parsed-args)))
                       (if chromosome
                           (multiple-value-bind (cstart cend)
