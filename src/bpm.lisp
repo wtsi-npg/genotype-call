@@ -104,7 +104,7 @@ Beadpool Manifest."
 
 (defgeneric has-chromosome-p (manifest chromosome)
   (:documentation "Returns T if CHROMOSOME is present in MANIFEST.")
-  (:method has-chromosome-p ((manifest bpm) (chromosome string))
+  (:method ((manifest bpm) (chromosome string))
            (member chromosome (slot-value manifest 'chromosomes)
                    :test #'string=)))
 
