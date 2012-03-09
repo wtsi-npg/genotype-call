@@ -29,13 +29,13 @@
    (version :initform 1 :reader version-of
             :documentation "The SIM format version.")
    (name-size :initform 255 :initarg :name-size :reader name-size-of)
-   (num-probes :initform 0 :initarg :num-probes :reader num-probes-of)
    (num-samples :initform 0 :initarg :num-samples :accessor num-samples-of)
+   (num-probes :initform 0 :initarg :num-probes :reader num-probes-of)
    (num-channels :initform 2 :initarg :num-channels :reader num-channels-of)
    (format :initform 'single-float :initarg :format :reader format-of)))
 
 (defmethod initialize-instance :after ((sim sim) &key)
-  (with-slots (stream version name-size num-probes num-samples
+  (with-slots (stream version name-size num-samples num-probes
                       num-channels format)
       sim
     (cond ((not (open-stream-p stream))
@@ -43,12 +43,12 @@
                   :format-control "SIM stream ~a  closed unexpectedly"
                   :format-arguments (list stream)))
           ((input-stream-p stream)
-           (setf (values version name-size num-probes num-samples
+           (setf (values version name-size num-samples num-probes
                          num-channels format)
                  (read-sim-header stream (make-array 4 :element-type 'octet
                                                      :initial-element 0))))
           ((output-stream-p stream)
-           (write-sim-header version name-size num-probes num-samples
+           (write-sim-header version name-size num-samples num-probes
                              num-channels format stream
                              (make-array 4 :element-type 'octet))))))
 
@@ -73,21 +73,21 @@
 
 (defun sim-open (filespec &rest args)
   (multiple-value-bind (oargs initargs)
-      (remove-key-values '(:version :name-size :num-probes
-                           :num-samples :num-channels :format) args)
+      (remove-key-values '(:version :name-size :num-samples :num-probes
+                           :num-channels :format) args)
     (let ((stream (if (streamp filespec)
                       filespec
                       (apply #'open filespec :element-type 'octet oargs))))
       (apply #'make-instance 'sim :stream stream (flatten initargs)))))
 
 (defun sim-close (sim)
-  (with-slots (stream version name-size num-probes num-samples
+  (with-slots (stream version name-size num-samples num-probes
                       num-channels format)
       sim
     (when (output-stream-p stream)
       (unless (file-position stream 0)
         (error 'io-error "failed to write header"))
-      (write-sim-header version name-size num-probes num-samples
+      (write-sim-header version name-size num-samples num-probes
                         num-channels format stream
                         (make-array 4 :element-type 'octet :initial-element 0)))
     (close stream)))
@@ -175,13 +175,13 @@
           (read-uint8 stream buffer)    ; num-channels
           (read-sim-format stream buffer)))
 
-(defun write-sim-header (version name-size num-probes num-samples
+(defun write-sim-header (version name-size num-samples num-probes
                          num-channels format stream buffer)
   (write-magic *sim-magic* stream)
   (write-version version stream buffer)
   (write-uint16 name-size stream buffer)
-  (write-uint32 num-probes stream buffer)
   (write-uint32 num-samples stream buffer)
+  (write-uint32 num-probes stream buffer)
   (write-uint8 num-channels stream buffer)
   (write-sim-format format stream buffer))
 
