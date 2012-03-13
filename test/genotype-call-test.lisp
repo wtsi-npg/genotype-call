@@ -160,12 +160,8 @@
 
 (addtest (genotype-call-tests) data-field-of/2
   (with-gtc (gtc (merge-pathnames "data/example.gtc"))
-    (let ((xforms (data-field-of gtc :normalization-xforms)))
-      (loop
-         for xform across xforms
-         do (ensure (every #'consp (mapcar (lambda (field)
-                                             (assoc field xform))
-                                           *xform-fields*)))))))
+    (ensure (every #'xform-p
+                   (coerce (data-field-of gtc :normalization-xforms) 'list)))))
 
 (addtest (genotype-call-tests) data-field-of/3
   (with-gtc (gtc (merge-pathnames "data/example.gtc"))

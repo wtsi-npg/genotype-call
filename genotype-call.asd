@@ -27,7 +27,7 @@
   :author "Keith James"
   :licence "GPL v3"
   :depends-on (:deoxybyte-systems
-               (:version :deoxybyte-io "0.12.0"))
+               (:version :deoxybyte-io "0.13.0"))
   :in-order-to ((test-op (load-op :genotype-call :genotype-call-test)))
   :components ((:module :genotype-call
                         :serial t
@@ -39,6 +39,7 @@
                                      (:file "sim")
                                      (:file "illuminus")
                                      (:file "intensity-processing")
+                                     (:file "gtc-building")
                                      (:file "genotype-call-cli")))
                (:lift-test-config :lift-tests
                                   :pathname "genotype-call-test"

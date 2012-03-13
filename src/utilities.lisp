@@ -47,34 +47,41 @@ changed, is restored on leaving."
   (decode-uint8le (read-record stream buffer 1)))
 
 (defun write-version (version stream buffer)
-  (write-sequence (encode-int8le version buffer) stream :end 1))
+  (write-sequence (encode-uint8le version buffer) stream :end 1))
 
 (defun read-float (stream buffer)
   (decode-float32le (read-record stream buffer 4)))
+
+(defun write-float (value stream buffer)
+  (write-sequence (encode-float32le value buffer) stream :end 4))
 
 (defun read-uint8 (stream buffer)
   (decode-uint8le (read-record stream buffer 1)))
 
 (defun write-uint8 (value stream buffer)
-  (write-sequence (encode-int8le value buffer) stream :end 1))
+  (write-sequence (encode-uint8le value buffer) stream :end 1))
 
 (defun read-uint16 (stream buffer)
   (decode-uint16le (read-record stream buffer 2)))
 
 (defun write-uint16 (value stream buffer)
-  (write-sequence (encode-int16le value buffer) stream :end 2))
+  (write-sequence (encode-uint16le value buffer) stream :end 2))
 
 (defun read-uint32 (stream buffer)
   (decode-uint32le (read-record stream buffer 4)))
 
 (defun write-uint32 (value stream buffer)
-  (write-sequence (encode-int32le value buffer) stream :end 4))
+  (write-sequence (encode-uint32le value buffer) stream :end 4))
 
-(defun read-string (stream buffer)
+(defun read-gtc-string (stream buffer)
   (let ((buffer (read-record stream buffer 1)))
     (let* ((len (decode-uint8le buffer))
            (str (make-array len :element-type 'octet :initial-element 0)))
       (octets-to-string (read-record stream str len)))))
+
+(defun write-gtc-string (str stream buffer)
+  (write-uint8 (length str) stream buffer)
+  (write-sequence (string-to-octets str) stream))
 
 (defun read-record (stream buffer record-size)
   (let ((num-bytes (read-sequence buffer stream :end record-size)))

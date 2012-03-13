@@ -61,6 +61,8 @@
    #:data-field-of
    #:toc-of
    #:normalize
+   #:xform
+   #:xform-p
 
    ;; SIM
    #:sim
