@@ -19,7 +19,7 @@
 
 (in-package :uk.ac.sanger.genotype-call)
 
-(defgeneric copy-intensities (from to metadata &key test key)
+(defgeneric copy-intensities (from to metadata &key test key &allow-other-keys)
   (:documentation "Copies microarray intensity data FROM sources such
 as GTC or SIM files TO a destination such as a SIM or genotype caller
 input file. The METADATA argument is used to provide additional
@@ -49,7 +49,7 @@ Returns:
 (defmethod copy-intensities :before ((gtc gtc) (sim sim) (snps vector)
                                      &key key test)
   (declare (ignorable key test))
-  (with-slots (stream version name-size num-probes num-samples num-channels)
+  (with-slots (stream version name-size num-samples num-probes num-channels)
       sim
     (check-arguments (= 2 num-channels) (sim)
                      "found ~d intensity channels; expected 2 for GTC data"
@@ -122,19 +122,16 @@ Returns:
                   (read-intensities sim :start start :end end)
                 (setf (svref sample-names i) name
                       (svref intensities i) sample-intensities)))
-        ;; Should check here that all the intensity vectors are the
-        ;; same length
         (let ((stream (stream-of iln))
               (*print-pretty* nil))
           (write-illuminus-header sample-names stream)
           ;; For each SNP
           (loop
-             for i from 0 below end     ; probe index, offset to 0
-             for j = (* 2 i)            ; intensity index, in pairs
-             for k = start then (1+ k)  ; SNP index, not offset
+             for i from start below end ; SNP index, offset to start
+             for j from 0 by 2          ; intensity index, in pairs, not offset
              do (progn
                   ;; Write this SNP's intensities for all samples
-                  (write-illuminus-snp (svref snps k) stream)
+                  (write-illuminus-snp (svref snps i) stream)
                   (loop                
                      for sample-intensities across intensities
                      do (write-illuminus-intensities
@@ -143,20 +140,6 @@ Returns:
                          stream)
                      finally (terpri stream))))))))
   iln)
-
-(defun num-intensities (intensities)
-  (let ((lengths (map 'list #'length intensities)))
-    (cond ((null lengths)
-           0)
-          ((every (lambda (x)
-                    (= (first lengths) x)) lengths)
-           (first lengths))
-          (t
-           (error 'invalid-operation-error
-                  :format-control "intensity vectors were different ~
-                                   lengths: ~a"
-                  :format-arguments (list lengths))))))
-
 
 ;;; Implementation of SIM -> Illuminus with SNP manifest metadata
 (defmethod copy-intensities ((sim sim) (iln iln) (manifest bpm)
