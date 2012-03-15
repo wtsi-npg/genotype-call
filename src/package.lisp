@@ -31,6 +31,7 @@
    
    ;; BPM
    #:bpm
+   #:load-bpm
    #:read-bpm
    #:alleles-of
    #:chromosomes-of
