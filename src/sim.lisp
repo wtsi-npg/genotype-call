@@ -187,11 +187,31 @@
 
 (defun write-2channel-intensities (snps x-intensities y-intensities
                                    intensity-size xforms stream)
+  "Writes normalized intensity data for selected SNPs to STREAM.
+
+Arguments:
+
+- snps (simple-vector of snp): A vector of snp structs for those SNPs
+  whose data are to be written. The snp-index field supplies the index
+  into the intensity vectors for extraction of intensity values.
+- x-intensities (vector of uint16): The x channel intensities, some of
+  which will be written.
+- y-intensities (vector of uint16): The y channel intensities, some of
+  which will be written.
+- intensity-size (fixnum): The number of bytes occupied by each
+  intensity value once encoded (used to calculate offsets into the output
+  vector).
+- xforms (simple-vector of xform): The xform normalization structures.
+- stream (binary output stream): The output stream.
+
+Returns:
+
+- A fixnum (the number of bytes written)"
   (declare (optimize (speed 3) (safety 1)))
   (declare (type (simple-array snp (*)) snps)
            (type (simple-array uint16 (*)) x-intensities y-intensities)
            (type (integer 2 4) intensity-size))
-  (let* ((nbytes  (* 2 intensity-size))
+  (let* ((nbytes (* 2 intensity-size))
          (total-size (* nbytes (the snp-count (length snps))))
          (pair-size (* 2 intensity-size)))
     (loop

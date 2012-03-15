@@ -18,7 +18,7 @@
 .PHONY:	all clean
 
 all:
-	sbcl --dynamic-space-size 4096 --no-userinit --disable-debugger --load build.lisp
+	sbcl --dynamic-space-size 1024 --no-userinit --disable-debugger --load build.lisp
 
 clean:
 	rm -r build/*

@@ -25,8 +25,8 @@
 (defparameter *possible-strands*
   '("Bot" "BOT" "M" "MINUS" "P" "PLUS" "Top" "TOP"))
 
-(defparameter *example-snp-counts*
-    '(("16" 4) ("2" 4) ("9" 2)))
+(defparameter *example-bpm*
+  (load-bpm (merge-pathnames "data/example.bpm.csv")))
 
 ;; To check the SIM file contents:
 ;;
@@ -67,16 +67,24 @@
 (addtest (genotype-call-tests) read-bpm/1
   (with-open-file (stream (merge-pathnames "data/example.bpm.csv"))
     (let ((manifest (read-bpm stream))
-          (chrs (mapcar #'first *example-snp-counts*))
-          (counts (mapcar #'second *example-snp-counts*)))
+          (chrs (mapcar (lambda (x)
+                          (format nil "~d" x)) (iota 10 1))))
       (ensure (= 10 (num-snps-of manifest)))
-      (ensure (equal chrs (chromosomes-of manifest)))
-      (ensure (equal counts (mapcar (lambda (chr)
-                                      (num-snps-of manifest
-                                                   :key #'snp-chromosome
-                                                   :test (lambda (x)
-                                                           (string= chr x))))
-                                    chrs))))))
+      (let ((observed (chromosomes-of manifest))
+            (expected  (sort chrs #'string<)))
+        (ensure (equal expected observed)
+                :report "expected ~a but found ~a"
+                :arguments (expected observed)))
+      (let ((observed (mapcar (lambda (chr)
+                                (num-snps-of manifest
+                                             :key #'snp-chromosome
+                                             :test (lambda (x)
+                                                     (string= chr x))))
+                              chrs))
+            (expected (loop repeat 10 collect 1)))
+        (ensure (equal expected observed)
+                :report "expected ~a but found ~a"
+                :arguments (expected observed))))))
 
 (addtest (genotype-call-tests) read-bpm/2
   (with-open-file (stream (merge-pathnames "data/example_unsorted.bpm.csv"))
@@ -105,75 +113,59 @@
   (ensure (every #'valid-alleles-p *possible-alleles*)))
 
 (addtest (genotype-call-tests) make-chromosome-p/1
-  (with-open-file (stream (merge-pathnames "data/example.bpm.csv"))
-    (let ((manifest (read-bpm stream))
-          (chrs (mapcar #'first *example-snp-counts*)))
-      (dolist (chr chrs)
-        (let ((pred (make-chromosome-p manifest chr #'string=)))
-          (ensure (funcall pred chr))
-          (ensure (not (funcall pred "NOT A VALID CHROMOSOME"))))))))
+  (let ((chrs (mapcar (lambda (x)
+                        (format nil "~d" x)) (iota 10 1))))
+    (dolist (chr chrs)
+      (let ((pred (make-chromosome-p *example-bpm* chr #'string=)))
+        (ensure (funcall pred chr))
+        (ensure (not (funcall pred "NOT A VALID CHROMOSOME")))))))
 
 (addtest (genotype-call-tests) gtc-open/close/1
-  (with-open-file (stream (merge-pathnames "data/example.gtc")
+  (with-open-file (stream (merge-pathnames "data/example_0000.gtc")
                           :element-type 'octet)
     (let ((gtc (gtc-open stream)))
       (ensure gtc)
       (ensure (= 3 (version-of gtc)))
-      (ensure (= 24 (length (toc-of gtc))))
+      (ensure (= 9 (length (toc-of gtc))))
       (ensure (gtc-close gtc)))))
 
 (addtest (genotype-call-tests) with-gtc/1
-  (with-gtc (gtc (merge-pathnames "data/example.gtc"))
+  (with-gtc (gtc (merge-pathnames "data/example_0000.gtc"))
      (ensure (= 3 (version-of gtc)))
-     (ensure (= 24 (length (toc-of gtc))))))
+     (ensure (= 9 (length (toc-of gtc))))))
 
 (addtest (genotype-call-tests) data-field-of/1
-  (with-gtc (gtc (merge-pathnames "data/example.gtc"))
-    (ensure (= 660447 (data-field-of gtc :num-snps)))
-    (ensure (string= "test_sample" (data-field-of gtc :sample-name)))
-    (ensure (string= "test_plate_01" (data-field-of gtc :sample-plate)))
-    (ensure (string= "A01" (data-field-of gtc :sample-well)))
-    (ensure (string= "Human670-QuadCustom_v1_A.egt"
-                     (data-field-of gtc :cluster-file)))
-    (ensure (string= "Human670-QuadCustom_v1_A.bpm"
+  (with-gtc (gtc (merge-pathnames "data/example_0000.gtc"))
+    (ensure (= 10 (data-field-of gtc :num-snps)))
+    (ensure (string= "example_0000" (data-field-of gtc :sample-name)))
+    (ensure (string= "example.bpm"
                      (data-field-of gtc :snp-manifest)))
-    (ensure (string= "Tuesday, June 14, 2011 1:55:35 PM"
-                     (data-field-of gtc :imaging-date)))
-    (ensure (string= "6/14/2011 2:12 PM"
-                     (data-field-of gtc :autocall-date)))
-    (ensure (string= "1.6.2.2"
-                     (data-field-of gtc :autocall-version)))
-
-    (ensure (= 24 (length (data-field-of gtc :normalization-xforms))))
+    (ensure (= 1 (length (data-field-of gtc :normalization-xforms))))
 
     (ensure-condition (invalid-argument-error)
       (data-field-of gtc :invalid-field))
       
-    (ensure (= 264 (length (data-field-of gtc :x-controls))))
-    (ensure (= 264 (length (data-field-of gtc :y-controls))))
-      
-    (ensure (= 660447 (length (data-field-of gtc :x-intensities))))
-    (ensure (= 660447 (length (data-field-of gtc :y-intensities))))
-    (ensure (= 660447 (length (data-field-of gtc :genotypes))))
-    (ensure (= 660447 (length (data-field-of gtc :basecalls))))
-    (ensure (= 660447 (length (data-field-of gtc :genotype-scores))))))
+    (ensure (= 20 (length (data-field-of gtc :x-intensities))))
+    (ensure (= 20 (length (data-field-of gtc :y-intensities))))
+    (ensure (= 10 (length (data-field-of gtc :genotypes))))
+    (ensure (= 10 (length (data-field-of gtc :basecalls))))
+    (ensure (= 10 (length (data-field-of gtc :genotype-scores))))))
 
 (addtest (genotype-call-tests) data-field-of/2
-  (with-gtc (gtc (merge-pathnames "data/example.gtc"))
+  (with-gtc (gtc (merge-pathnames "data/example_0000.gtc"))
     (ensure (every #'xform-p
                    (coerce (data-field-of gtc :normalization-xforms) 'list)))))
 
 (addtest (genotype-call-tests) data-field-of/3
-  (with-gtc (gtc (merge-pathnames "data/example.gtc"))
+  (with-gtc (gtc (merge-pathnames "data/example_0000.gtc"))
     (ensure (every (lambda (x)
                      (and (vectorp x) (integerp (aref x 0))))
                    (mapcar (lambda (field)
                              (data-field-of gtc field))
-                           '(:x-controls :y-controls
-                             :x-intensities :y-intensities))))))
+                           '(:x-intensities :y-intensities))))))
 
 (addtest (genotype-call-tests) data-field-of/4
-  (with-gtc (gtc (merge-pathnames "data/example.gtc"))
+  (with-gtc (gtc (merge-pathnames "data/example_0000.gtc"))
     (ensure (every (lambda (x)
                      (and (vectorp x) (stringp (aref x 0))))
                    (mapcar (lambda (field)
@@ -181,26 +173,26 @@
                            '(:genotypes :basecalls))))))
 
 (addtest (genotype-call-tests) data-field-of/5
-  (with-gtc (gtc (merge-pathnames "data/example.gtc"))
+  (with-gtc (gtc (merge-pathnames "data/example_0000.gtc"))
     (let ((scores (data-field-of gtc :genotype-scores)))
       (ensure (and (vectorp scores) (floatp (aref scores 0)))))))
 
 (addtest (genotype-call-tests) gtc-to-sim/1
-  (handler-bind ((error #'leave-tmp-pathname))
+  (handler-bind ((test-condition #'leave-tmp-pathname))
     (with-tmp-pathname (tmp :tmpdir (merge-pathnames "data") :type "sim")
-      (with-open-file (stream (merge-pathnames "data/example.bpm.csv"))
-        (let ((manifest (read-bpm stream))
-              (count 5))
+      (let ((gtc-files '("data/example_0000.gtc" "data/example_0001.gtc"
+                         "data/example_0002.gtc" "data/example_0003.gtc"
+                         "data/example_0004.gtc")))
           (with-sim (sim tmp :direction :output :if-exists :supersede
                          :if-does-not-exist :create)
-            (dotimes (n count)
-              (with-gtc (gtc (merge-pathnames "data/example.gtc"))
-                (ensure (copy-intensities gtc sim manifest)))
-              (ensure (= (1+ n) (num-samples-of sim))
-                      :report "expected ~d, but found ~d"
-                      :arguments ((1+ n) (num-samples-of sim)))))
+            (dolist (file gtc-files)
+              (with-gtc (gtc (merge-pathnames file))
+                (ensure (copy-intensities gtc sim *example-bpm*))))
+            (ensure (= (length gtc-files) (num-samples-of sim))
+                    :report "expected ~d, but found ~d"
+                    :arguments ((length gtc-files) (num-samples-of sim))))
           (with-sim (sim tmp)
-            (ensure (= count (num-samples-of sim)))))))))
+            (ensure (= (length gtc-files) (num-samples-of sim))))))))
 
 (addtest (genotype-call-tests) sim-open-close/1
   (with-open-file (stream (merge-pathnames "data/example.sim")
@@ -285,23 +277,53 @@
                 for line = (read-line stream nil nil)
                 while line
                 collect line))))
-    (handler-bind ((error #'leave-tmp-pathname))
+    (handler-bind ((test-condition #'leave-tmp-pathname))
       (with-tmp-pathname (tmp-sim :tmpdir (merge-pathnames "data") :type "sim")
-        (with-open-file (stream (merge-pathnames "data/example.bpm.csv"))
-          (let ((manifest (read-bpm stream))
-                (count 5))
-            (with-sim (sim tmp-sim :direction :output :if-exists :supersede
-                           :if-does-not-exist :create)
-              (dotimes (n count)
-                (with-gtc (gtc (merge-pathnames "data/example.gtc"))
-                  (copy-intensities gtc sim manifest))))
-            (with-tmp-pathname (tmp-iln :tmpdir (merge-pathnames "data")
-                                        :type "iln")
-              (let ((iln (sim-to-illuminus tmp-iln manifest tmp-sim)))
-                (ensure iln))
-              (let ((expected (read-lines (merge-pathnames
-                                           "data/example.iln")))
-                    (observed (read-lines tmp-iln)))
-                (ensure (equalp observed expected)
-                        :report "expected ~a but found ~a"
-                        :arguments (expected observed))))))))))
+        (let ((gtc-files '("data/example_0000.gtc" "data/example_0001.gtc"
+                           "data/example_0002.gtc" "data/example_0003.gtc"
+                           "data/example_0004.gtc")))
+          (with-sim (sim tmp-sim :direction :output :if-exists :supersede
+                         :if-does-not-exist :create)
+            (dolist (file gtc-files)
+              (with-gtc (gtc (merge-pathnames file))
+                (copy-intensities gtc sim *example-bpm*))))
+          (with-tmp-pathname (tmp-iln :tmpdir (merge-pathnames "data")
+                                      :type "iln")
+            (let ((iln (sim-to-illuminus tmp-iln *example-bpm* tmp-sim)))
+              (ensure iln))
+            (let ((expected (read-lines (merge-pathnames "data/example.iln")))
+                  (observed (read-lines tmp-iln)))
+              (ensure (equalp observed expected)
+                      :report "expected ~a but found ~a"
+                      :arguments (expected observed)))))))))
+
+(addtest (genotype-call-tests) sim-to-illuminus/2
+  (flet ((read-lines (filespec)
+           (with-open-file (stream filespec)
+             (loop
+                for line = (read-line stream nil nil)
+                while line
+                collect line))))
+    (handler-bind ((test-condition #'leave-tmp-pathname))
+      (with-tmp-pathname (tmp-sim :tmpdir (merge-pathnames "data") :type "sim")
+        (with-sim (sim tmp-sim :direction :output :if-exists :supersede
+                       :if-does-not-exist :create)
+          (with-gtc (gtc (merge-pathnames "data/example_0000.gtc"))
+            (copy-intensities gtc sim *example-bpm*
+                              :test (lambda (index)
+                                      (oddp index))
+                              :key #'snp-index))
+        (ensure (= 5 (num-probes-of sim))
+                :report "expected ~a but observed ~a"
+                :arguments (5 (num-probes-of sim))))
+      (with-tmp-pathname (tmp-iln :tmpdir (merge-pathnames "data") :type "iln")
+        (let ((iln (sim-to-illuminus tmp-iln *example-bpm* tmp-sim
+                                     :test #'(lambda (index)
+                                               (oddp index))
+                                     :key #'snp-index)))
+          (ensure iln))
+        (let ((expected (read-lines (merge-pathnames "data/example_odd.iln")))
+              (observed (read-lines tmp-iln)))
+          (ensure (equalp observed expected)
+                  :report "expected ~a but found ~a"
+                  :arguments (expected observed))))))))
