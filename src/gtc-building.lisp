@@ -54,17 +54,18 @@
     (with-open-file (bpm filespec :direction :output :if-exists :supersede
                          :if-does-not-exist :create)
       (write-line *bpm-header* bpm)
-      (do* ((index 0 (1+ index))
-            (name (make-name index) (make-name index))
-            (chromosome (make-chr index) (make-chr index))
-            (position (make-pos chromosome index) (make-pos chromosome index))
+      (do* ((i 0 (1+ i))
+            (snp-index 1 (1+ snp-index))
+            (name (make-name snp-index) (make-name snp-index))
+            (chromosome (make-chr i) (make-chr i))
+            (position (make-pos chromosome i) (make-pos chromosome i))
             (gentrain-score 1.f0)
             (snp "[G/A]")
             (ilmn-strand "TOP")
             (customer-strand "TOP")
             (norm-id 1))
-           ((= num-snps index) filespec)
-        (dolist (elt (intersperse (list (1+ index)
+           ((= num-snps i) filespec)
+        (dolist (elt (intersperse (list snp-index
                                         name chromosome position
                                         gentrain-score snp
                                         ilmn-strand customer-strand norm-id)
