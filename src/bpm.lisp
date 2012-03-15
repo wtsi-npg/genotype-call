@@ -25,12 +25,12 @@
 
 (defparameter *default-bpm-size* 100000
   "The default size (number of SNPs) per manifest assumed prior to
-  parsing. Vectors created while parsing start at this size.")
+parsing. Vectors created while parsing start at this size.")
 
 (deftype snp-count ()
   "SNP index type denoting the possible range of number of SNPs per
-  microarray. This value is set at an order of magnitiude larger than
-  the largest chip currently available."
+microarray. This value is set at an order of magnitiude larger than
+the largest chip currently available."
   '(and fixnum (integer 0 100000000)))
 
 (defstruct (snp (:constructor make-snp (index name chromosome position
@@ -71,8 +71,8 @@ Beadpool Manifest."
 
 (defgeneric snps-of (manifest &key key test)
   (:documentation "Returns the SNPs described by MANIFEST, optionally
-  restricting the count to only those SNPs for which predicate TEST
-  returns T.")
+restricting the count to only those SNPs for which predicate TEST
+returns T.")
   (:method ((manifest bpm) &key key test)
     (with-slots (snps)
         manifest
@@ -97,8 +97,8 @@ Beadpool Manifest."
 
 (defgeneric num-snps-of (manifest &key key test)
   (:documentation "Returns the number of SNPs described by MANIFEST,
-  optionally restricting the count to only those SNPs for which
-  predicate TEST returns T.")
+optionally restricting the count to only those SNPs for which
+predicate TEST returns T.")
   (:method ((manifest bpm) &key key test)
     (length (snps-of manifest :key key :test test))))
 
@@ -110,7 +110,7 @@ Beadpool Manifest."
 
 (defgeneric chromosome-boundaries (manifest chromosome)
   (:documentation "Returns two values, being the indices of the first
-  and last SNPs on CHROMOSOME in MANIFEST.")
+and last SNPs on CHROMOSOME in MANIFEST.")
   (:method ((manifest bpm) (chromosome string))
     (check-arguments (has-chromosome-p manifest chromosome)
                      (chromosome)
