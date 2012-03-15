@@ -83,6 +83,16 @@ designating a CLI class."
   (:documentation "sim-to-illuminus --input <filename> --output <filename>
 --manifest <filename> [--chromosome <name>]"))
 
+(define-cli mock-study-cli (cli manifest-mixin)
+  ((study-name "study-name" :required-option t :value-type 'string
+               :documentation "The name of the study, used in file naming.")
+   (num-samples "num-samples" :required-option t :value-type 'integer
+                :documentation "The number of samples and hence GTC files.")
+   (num-snps "num-snps" :required-option t :value-type 'integer
+             :documentation "The number of SNPs in the mock manifest."))
+  (:documentation "mock-study --study-name <name> --num-samples <n>
+--num-snps <m> --manifest <filename>"))
+
 (defun cli ()
   "Applies the appropriate command line interface."
   (flet ((errmsg (c)
@@ -152,3 +162,13 @@ designating a CLI class."
                           (sim-to-illuminus output manifest input
                                             :start start :end end)))))
 
+(register-command "mock-study" 'mock-study-cli
+                  (lambda (parsed-args &optional other)
+                    (declare (ignorable other))
+                    (let ((manifest (option-value 'manifest parsed-args)))
+                      (generate-manifest
+                       manifest (option-value 'num-snps parsed-args))
+                      (generate-study
+                       (option-value 'study-name parsed-args)
+                       (option-value 'num-samples parsed-args)
+                       manifest))))
