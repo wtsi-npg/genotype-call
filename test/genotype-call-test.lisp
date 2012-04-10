@@ -20,7 +20,13 @@
 (in-package :uk.ac.sanger.genotype-call-test)
 
 (defparameter *possible-alleles*
-  '("AA" "AC" "AG" "AT" "CC" "CG" "GC" "GG" "TA" "TC" "TG" "TT" "DI" "ID" "NA"))
+  '(#\A #\C #\G #\T #\D #\I))
+
+(defparameter *possible-allele-pairs*
+  (let ((pairs (list '(#\D #\I) '(#\I #\D))))
+    (dolist (a '(#\A #\C #\G #\T))
+      (dolist (b '(#\A #\C #\G #\T))
+        (push (list a b) pairs)))))
 
 (defparameter *possible-strands*
   '("Bot" "BOT" "M" "MINUS" "P" "PLUS" "Top" "TOP"))
@@ -93,24 +99,22 @@
     (ensure-condition (malformed-file-error)
       (read-bpm stream :strict-ordering t))))
 
-(addtest (genotype-call-tests) normalize-alleles/1
-  (dolist (alleles *possible-alleles*)
+(addtest (genotype-call-tests) normalize-allele/1
+  (dolist (allele *possible-alleles*)
     (dolist (strand (remove-duplicates
                      (mapcar (lambda (str)
                                (genotype-call::parse-strand nil str))
                              *possible-strands*)))
-      (let ((norm (genotype-call::normalize-alleles alleles strand)))
-        (cond ((string= "NA" norm)
+      (let ((norm (genotype-call::normalize-allele allele strand)))
+        (cond ((char= #\. norm)
                nil)
               ((eql #\B strand)
-               (ensure (string= (map 'simple-string
-                                     #'genotype-call::complement-allele
-                                     alleles) norm)))
+               (ensure (char= (genotype-call::complement-allele allele) norm)))
               (t
-               (string= alleles norm)))))))
+               (char= allele norm)))))))
 
 (addtest (genotype-call-tests) valid-alleles-p/1
-  (ensure (every #'valid-alleles-p *possible-alleles*)))
+  (ensure (every #'valid-alleles-p *possible-allele-pairs*)))
 
 (addtest (genotype-call-tests) make-chromosome-p/1
   (let ((chrs (mapcar (lambda (x)

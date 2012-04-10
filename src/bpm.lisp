@@ -34,7 +34,8 @@ the largest chip currently available."
   '(and fixnum (integer 0 100000000)))
 
 (defstruct (snp (:constructor make-snp (index name chromosome position
-                                        alleles ilmn-strand cust-strand
+                                        allele-a allele-b
+                                        ilmn-strand cust-strand
                                         norm-id)))
   "A representation of the data for a single SNP as stored in a
 Beadpool Manifest."
@@ -42,7 +43,8 @@ Beadpool Manifest."
   (name "" :type simple-string)
   (chromosome "" :type simple-string)
   (position 0 :type fixnum)
-  (alleles "" :type simple-string)
+  (allele-a #\? :type character)
+  (allele-b #\? :type character)
   (ilmn-strand #\? :type character)
   (cust-strand #\? :type character)
   (norm-id 0 :type fixnum)
@@ -168,7 +170,8 @@ must be represented in MANIFEST."
             ((eql :eof line) (make-bpm))
           (let* ((record (parse-bpm-record line))
                  (index (assocdr 'index record))
-                 (chromosome (assocdr 'chromosome record)))
+                 (chromosome (assocdr 'chromosome record))
+                 (alleles (assocdr 'alleles record)))
             (when (and strict-ordering (/= (1+ i) index))
               (error 'malformed-file-error :file stream
                      :format-control "SNP records were not in ascending order ~
@@ -181,7 +184,8 @@ must be represented in MANIFEST."
                        (assocdr 'name record)
                        chromosome
                        (assocdr 'position record)
-                       (assocdr 'alleles record)
+                       (first alleles)  ; allele A
+                       (second alleles) ; allele B
                        (assocdr 'ilmn-strand record)
                        (assocdr 'cust-strand record)
                        (assocdr 'norm-id record)) snps 50000)))))))
@@ -219,10 +223,9 @@ B (BOT), - (MINUS) or + (PLUS)."
 (defun parse-alleles (field-name str &key (start 0) end null-str)
   (declare (ignore field-name null-str))
   (cond ((string= "[N/A]" str :start2 start :end2 end)
-         "NA")
+         (list #\? #\?))
         ((>= (length str) (+ start 3))
-         (coerce (list (char str (1+ start)) (char str (+ start 3)))
-                 'simple-string))
+         (list (char str (1+ start)) (char str (+ start 3))))
         (t
          (error 'malformed-field-error :field (subseq str start end)
                 :record str))))
@@ -242,10 +245,12 @@ strand to allele character C."
     (#\D #\I)
     (#\I #\D)))
 
-(defun valid-alleles-p (str)
-  "Returns T if STR is a valid manifest allele string."
-  (or (string= "NA" str) (string= "DI" str) (string= "ID" str)
-      (every #'nucleotidep str)))
+(defun valid-alleles-p (alleles)
+  "Returns T if ALLELES are a valid manifest allele list."
+  (or (equal '(#\? #\?) alleles)
+      (equal '(#\D #\I) alleles)
+      (equal '(#\I #\D) alleles)
+      (every #'nucleotidep alleles)))
 
 ;; The complete set of Ilmn_strand values across all the manifests that I
 ;; have available is somewhat variable, being:
@@ -258,25 +263,23 @@ strand to allele character C."
 ;;   [D/I] [I/D] [N/A] }
 
 (defun normalize-snp-alleles (snps)
-  "Modifies SNPs by applying NORMALIZE-ALLELES to each one."
+  "Modifies SNPs by applying NORMALIZE-ALLELE to each one."
   (loop
      for snp across snps
-     do (let ((norm (normalize-alleles (snp-alleles snp)
-                                       (snp-ilmn-strand snp))))
-          (if (string= (snp-alleles snp) norm)
-              snp
-              (setf (snp-alleles snp) norm
-                    (snp-ilmn-strand snp) #\T)))
+     do (let* ((strand (snp-ilmn-strand snp))
+               (norm-a (normalize-allele (snp-allele-a snp) strand))
+               (norm-b (normalize-allele (snp-allele-b snp) strand)))
+          (unless (and (char= norm-a (snp-allele-a snp))
+                       (char= norm-b (snp-allele-b snp)))
+            (setf (snp-allele-a snp) norm-a
+                  (snp-allele-b snp) norm-b
+                  (snp-ilmn-strand snp) #\T)))
      finally (return snps)))
 
-(defun normalize-alleles (alleles strand)
-  "Returns a string representing ALLELES, normalizing to the TOP
-strand."
-  (if (string= "NA" alleles)
-      alleles
-      (ecase strand
-        ((#\T #\+ #\-) alleles)
-        (#\B (map 'simple-string #'complement-allele alleles)))))
+(defun normalize-allele (allele strand)
+  (ecase strand
+    ((#\T #\+ #\-) allele)
+    (#\B (complement-allele allele))))
 
 (defun location< (snp1 snp2)
   (let ((chr1 (snp-chromosome snp1))
