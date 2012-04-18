@@ -77,10 +77,22 @@
    #:format-of
    #:read-intensities
 
+   ;; BED
+   #:bed
+   #:with-bed
+   #:bed-open
+   #:bed-close
+   #:orientation-of
+
    ;; Intensity processing
    #:copy-intensities
    #:gtc-to-sim
    #:sim-to-illuminus
+
+   ;; Genotype processing
+   #:copy-genotypes
+   #:gtc-to-bed
+   #:plink-pathname
 
    ;; Utilities
    #:version-of)
