@@ -28,7 +28,7 @@
 
 (defclass gtc ()
   ((stream :initform nil :initarg :stream :reader stream-of
-           :documentation "The input stream.")
+           :documentation "The input or output stream.")
    (version :initform nil :reader version-of
             :documentation "The GTC format version.")
    (toc :initform nil :reader toc-of
@@ -126,7 +126,7 @@ Returns:
     (if (open-stream-p stream)
         (make-instance 'gtc :stream stream)
         (error 'invalid-operation-error
-               :format-control "GTC stream ~a  closed unexpectedly"
+               :format-control "GTC stream ~a closed unexpectedly"
                :format-arguments (list stream)))))
 
 (defun gtc-close (gtc)

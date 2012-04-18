@@ -23,7 +23,7 @@
 
 (asdf:defsystem genotype-call
   :name "genotype-call"
-  :version "0.8.1"
+  :version "0.9.0"
   :author "Keith James"
   :licence "GPL v3"
   :depends-on (:deoxybyte-systems
@@ -38,7 +38,11 @@
                                      (:file "bpm")
                                      (:file "sim")
                                      (:file "illuminus")
+                                     (:file "bed")
+                                     (:file "bim")
+                                     (:file "fam")
                                      (:file "intensity-processing")
+                                     (:file "genotype-processing")
                                      (:file "gtc-building")
                                      (:file "genotype-call-cli")))
                (:lift-test-config :lift-tests

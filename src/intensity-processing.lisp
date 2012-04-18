@@ -19,7 +19,7 @@
 
 (in-package :uk.ac.sanger.genotype-call)
 
-(defgeneric copy-intensities (from to metadata &key test key &allow-other-keys)
+(defgeneric copy-intensities (from to metadata &key key test &allow-other-keys)
   (:documentation "Copies microarray intensity data FROM sources such
 as GTC or SIM files TO a destination such as a SIM or genotype caller
 input file. The METADATA argument is used to provide additional
@@ -36,10 +36,10 @@ Arguments:
 
 Key:
 
-- test (predicate): A test predicate used against the metadata to
-  select intensities for inclusion in the output.
 - key (function): A function used to transform metadata elements
   before applying TEST.
+- test (predicate): A test predicate used against the metadata to
+  select intensities for inclusion in the output.
 
 Returns:
 
