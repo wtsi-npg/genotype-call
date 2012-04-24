@@ -69,15 +69,17 @@ designating a CLI class."
   ((chromosome "chromosome" :required-option nil :value-type 'string
                :documentation "Limit processing to the named chromosome.")))
 
-(define-cli gtc-to-sim-cli (cli output-mixin manifest-mixin chromosome-mixin)
+(define-cli gtc-to-sim-cli (cli input-mixin output-mixin manifest-mixin
+                                chromosome-mixin)
   ()
-  (:documentation "gtc-to-sim --output <filename> --manifest <filename>
-[--chromosome <name>] <GTC filenames ...>"))
+  (:documentation "gtc-to-sim --input <filename> --output <filename>
+--manifest <filename> [--chromosome <name>]"))
 
-(define-cli gtc-to-bed-cli (cli output-mixin manifest-mixin chromosome-mixin)
+(define-cli gtc-to-bed-cli (cli input-mixin output-mixin manifest-mixin
+                                chromosome-mixin)
   ()
-  (:documentation "gtc-to-bed --output <filename> --manifest <filename>
-[--chromosome <name>] <GTC filenames ...>"))
+  (:documentation "gtc-to-bed --input <filename> --output <filename>
+--manifest <filename> [--chromosome <name>]"))
 
 (define-cli sim-to-illuminus-cli (cli input-mixin output-mixin manifest-mixin
                                       chromosome-mixin)
@@ -135,16 +137,22 @@ designating a CLI class."
 
 (defun make-gtc-to-command (gtc-to-fn)
   (lambda (parsed-args &optional other)
-    (let ((output (option-value 'output parsed-args))
-          (manifest (load-bpm
-                     (option-value 'manifest parsed-args)))
+    (declare (ignorable other))
+    (let ((input (maybe-standard-stream
+                  (option-value 'input parsed-args)))
+          (output (option-value 'output parsed-args))
+          (manifest (load-bpm (option-value 'manifest parsed-args)))
           (chromosome (option-value 'chromosome parsed-args)))
-      (if chromosome
-          (funcall gtc-to-fn output manifest other
-                   :test (make-chromosome-p
-                          manifest chromosome #'string=)
-                   :key #'snp-chromosome)
-          (funcall gtc-to-fn output manifest other)))))
+      (let ((specs (if (streamp input)
+                       (read-json-sample-specs input)
+                       (with-open-file (in input)
+                         (read-json-sample-specs in)))))
+        (if chromosome
+            (funcall gtc-to-fn output manifest specs
+                     :test (make-chromosome-p
+                            manifest chromosome #'string=)
+                     :key #'snp-chromosome)
+            (funcall gtc-to-fn output manifest specs))))))
 
 (register-command "gtc-to-sim" 'gtc-to-sim-cli
                   (make-gtc-to-command 'gtc-to-sim))

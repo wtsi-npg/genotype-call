@@ -32,7 +32,11 @@
   '("Bot" "BOT" "M" "MINUS" "P" "PLUS" "Top" "TOP"))
 
 (defparameter *example-bpm*
-  (load-bpm (merge-pathnames "data/example.bpm.csv")))
+  (load-bpm (merge-pathnames "data/example.bpm.csv") :name "example.bpm"))
+
+(defparameter *alternative-bpm*
+  (load-bpm (merge-pathnames "data/alternative.bpm.csv")
+            :name "alternative.bpm"))
 
 ;; To check the SIM file contents:
 ;;
@@ -87,6 +91,21 @@
       (ensure (equal e o)
               :report "expected ~a but found ~a"
               :arguments (e o)))))
+
+(defun example-gtc-specs ()
+  (mapcar (lambda (file uri)
+            (pairlis '(:result :uri)
+                     (list file (puri:uri uri))))
+          '("data/example_0000.gtc"
+            "data/example_0001.gtc"
+            "data/example_0002.gtc"
+            "data/example_0003.gtc"
+            "data/example_0004.gtc")
+          '("urn:wtsi:example_0000"
+            "urn:wtsi:example_0001"
+            "urn:wtsi:example_0002"
+            "urn:wtsi:example_0003"
+            "urn:wtsi:example_0004")))
 
 (deftestsuite genotype-call-tests ()
   ())
@@ -202,23 +221,6 @@
     (let ((scores (data-field-of gtc :genotype-scores)))
       (ensure (and (vectorp scores) (floatp (aref scores 0)))))))
 
-(addtest (genotype-call-tests) gtc-to-sim/1
-  (handler-bind ((test-condition #'leave-tmp-pathname))
-    (with-tmp-pathname (tmp :tmpdir (merge-pathnames "data") :type "sim")
-      (let ((gtc-files '("data/example_0000.gtc" "data/example_0001.gtc"
-                         "data/example_0002.gtc" "data/example_0003.gtc"
-                         "data/example_0004.gtc")))
-          (with-sim (sim tmp :direction :output :if-exists :supersede
-                         :if-does-not-exist :create)
-            (dolist (file gtc-files)
-              (with-gtc (gtc (merge-pathnames file))
-                (ensure (copy-intensities gtc sim *example-bpm*))))
-            (ensure (= (length gtc-files) (num-samples-of sim))
-                    :report "expected ~d, but found ~d"
-                    :arguments ((length gtc-files) (num-samples-of sim))))
-          (with-sim (sim tmp)
-            (ensure (= (length gtc-files) (num-samples-of sim))))))))
-
 (addtest (genotype-call-tests) sim-open-close/1
   (with-open-file (stream (merge-pathnames "data/example.sim")
                           :element-type 'octet)
@@ -295,6 +297,32 @@
      (ensure-condition (invalid-argument-error)
        (read-intensities sim :start 0 :end -1))))
 
+(addtest (genotype-call-tests) copy-intensities/gtc/sim/1
+  (handler-bind ((test-condition #'leave-tmp-pathname))
+    (with-tmp-pathname (tmp :tmpdir (merge-pathnames "data") :type "sim")
+      (let ((gtc-files '("data/example_0000.gtc" "data/example_0001.gtc"
+                         "data/example_0002.gtc" "data/example_0003.gtc"
+                         "data/example_0004.gtc")))
+          (with-sim (sim tmp :direction :output :if-exists :supersede
+                         :if-does-not-exist :create)
+            (dolist (file gtc-files)
+              (with-gtc (gtc (merge-pathnames file))
+                (ensure (copy-intensities gtc sim *example-bpm*))))
+            (ensure (= (length gtc-files) (num-samples-of sim))
+                    :report "expected ~d, but found ~d"
+                    :arguments ((length gtc-files) (num-samples-of sim))))
+          (with-sim (sim tmp)
+            (ensure (= (length gtc-files) (num-samples-of sim))))))))
+
+(addtest (genotype-call-tests) mismatched-manifest/1
+  (handler-bind ((test-condition #'leave-tmp-pathname))
+    (with-tmp-pathname (tmp :tmpdir (merge-pathnames "data") :type "sim")
+      (with-sim (sim tmp :direction :output :if-exists :supersede
+                     :if-does-not-exist :create)
+        (with-gtc (gtc (merge-pathnames "data/example_0000.gtc"))
+          (ensure-condition (invalid-argument-error)
+              (copy-intensities gtc sim *alternative-bpm*)))))))
+
 (addtest (genotype-call-tests) sim-to-illuminus/1
   (handler-bind ((test-condition #'leave-tmp-pathname))
     (with-tmp-pathname (tmp-sim :tmpdir (merge-pathnames "data") :type "sim")
@@ -322,10 +350,7 @@
           (copy-intensities gtc sim *example-bpm*
                             :test (lambda (index)
                                     (oddp index))
-                            :key #'snp-index))
-        (ensure (= 5 (num-probes-of sim))
-                :report "expected ~a but observed ~a"
-                :arguments (5 (num-probes-of sim))))
+                            :key #'snp-index)))
       (with-tmp-pathname (tmp-iln :tmpdir (merge-pathnames "data") :type "iln")
         (ensure (sim-to-illuminus tmp-iln *example-bpm* tmp-sim
                                   :test #'(lambda (index)
@@ -337,12 +362,10 @@
 (addtest (genotype-call-tests) gtc-to-bed/1
   (handler-bind ((test-condition #'leave-tmp-pathname))
     (with-tmp-pathname (tmp-bed :tmpdir (merge-pathnames "data") :type "bed")
-      (let ((gtc-files '("data/example_0000.gtc" "data/example_0001.gtc"
-                         "data/example_0002.gtc" "data/example_0003.gtc"
-                         "data/example_0004.gtc"))
+      (let ((specs (example-gtc-specs))
             (bim-file (plink-pathname tmp-bed "bim"))
             (fam-file (plink-pathname tmp-bed "fam")))
-        (ensure (gtc-to-bed tmp-bed *example-bpm* gtc-files))
+        (ensure (gtc-to-bed tmp-bed *example-bpm* specs))
         (ensure (binary-file= tmp-bed (merge-pathnames "data/example.bed")))
         (ensure (probe-file bim-file))
         (ensure (probe-file fam-file))
@@ -354,12 +377,10 @@
 (addtest (genotype-call-tests) gtc-to-bed/2
   (handler-bind ((test-condition #'leave-tmp-pathname))
     (with-tmp-pathname (tmp-bed :tmpdir (merge-pathnames "data") :type "bed")
-      (let ((gtc-files '("data/example_0000.gtc" "data/example_0001.gtc"
-                         "data/example_0002.gtc" "data/example_0003.gtc"
-                         "data/example_0004.gtc"))
+      (let ((specs (example-gtc-specs))
             (bim-file (plink-pathname tmp-bed "bim"))
             (fam-file (plink-pathname tmp-bed "fam")))
-        (ensure (gtc-to-bed tmp-bed *example-bpm* gtc-files
+        (ensure (gtc-to-bed tmp-bed *example-bpm* specs
                             :test #'(lambda (index)
                                       (oddp index))
                             :key #'snp-index))

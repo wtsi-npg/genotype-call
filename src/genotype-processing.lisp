@@ -39,7 +39,7 @@ Key:
 - key (function): A function used to transform metadata elements
   before applying TEST.
 - test (predicate): A test predicate used against the metadata to
-  select intensities for inclusion in the output.
+  select genotypes for inclusion in the output.
 
 Returns:
 
@@ -60,14 +60,15 @@ Returns:
          finally (write-bed-genotypes selected stream))))
   bed)
 
-(defmethod copy-genotypes ((gtc gtc) (bed bed) (manifest bpm) &key key test)
-  (copy-intensities gtc bed (snps-of manifest :key key :test test)))
+(defmethod copy-genotypes ((gtc gtc) (bed bed) (manifest bpm)
+                           &key key test name)
+  (copy-genotypes gtc bed (snps-of manifest :key key :test test) :name name))
 
-(defgeneric gtc-to-bed (bed-filespec manifest gtc-filespecs &key test key)
+(defgeneric gtc-to-bed (bed-filespec manifest sample-specs &key test key)
   (:documentation "Creates a new Plink BED file containing the
 aggregated genotype data from a list of GTC files. Also creates the
 corresponding FAM and BIM annotation files.")
-  (:method (bed-filespec (manifest bpm) gtc-filespecs &key test key)
+  (:method (bed-filespec (manifest bpm) sample-specs &key test key)
     (with-bed (bed bed-filespec :direction :output :if-exists :supersede
                    :if-does-not-exist :create
                    :orientation :individual-major)
@@ -75,25 +76,32 @@ corresponding FAM and BIM annotation files.")
                            :direction :output :if-exists :supersede
                            :if-does-not-exist :create)
         (let ((snps (snps-of manifest :test test :key key))
-              (prev-manifest-name))
+              (prev-manifest-name (name-of manifest)))
           (with-open-file (bim (plink-pathname bed-filespec "bim")
                                :direction :output :if-exists :supersede
                                :if-does-not-exist :create)
             (loop
                for snp across snps
                do (write-bim-snp snp bim)))
-          (dolist (gtc-filespec gtc-filespecs bed)
-            (with-gtc (gtc gtc-filespec)
-              (let ((manifest-name (data-field-of gtc :snp-manifest)))
-                (if (null prev-manifest-name)
-                    (setf prev-manifest-name manifest-name)
-                    (check-arguments (string= prev-manifest-name manifest-name)
-                                     (gtc-filespecs)
-                                     "manifest ~s does not match previous ~
-                                     manifest ~s" manifest-name
-                                     prev-manifest-name)))
-              (write-fam-individual (data-field-of gtc :sample-name) fam)
-              (copy-genotypes gtc bed snps))))))))
+          (dolist (spec sample-specs bed)
+            (let* ((gtc-filespec (assocdr :result spec))
+                   (uri (assocdr :uri spec)))
+              (with-gtc (gtc gtc-filespec)
+                (let ((manifest-name (data-field-of gtc :snp-manifest))
+                      (gtc-name (data-field-of gtc :sample-name)))
+                  (if (null prev-manifest-name)
+                      (setf prev-manifest-name manifest-name)
+                      (check-arguments
+                       (string= prev-manifest-name manifest-name)
+                       (spec)
+                       "manifest ~s does not match the expecte manifest ~s"
+                       manifest-name prev-manifest-name))
+                  (check-field (or (string= "" gtc-name)
+                                   (string= (puri:urn-nss uri) gtc-name))
+                               uri
+                               "conflict with sample name in GTC file")
+                  (write-fam-individual (format nil "~a" uri) fam)
+                  (copy-genotypes gtc bed snps))))))))))
 
 (defun plink-pathname (bed-filespec type)
   "Returns the default Plink name for file of TYPE given a pathname

@@ -33,7 +33,10 @@
             :documentation "The GTC format version.")
    (toc :initform nil :reader toc-of
         :documentation "The table of contents. A vector of TOC-ENTRY
-        objects."))
+        objects.")
+   (manifest-name :initform nil :reader manifest-name-of
+                  :documentation "A cached value of the SNP manifest
+                  name for internal use."))
   (:documentation "An Illumina Genotype Call binary file. These files
   are created by the Illumina genotyping process."))
 
@@ -72,13 +75,14 @@
   (reserved5 0.f0 :type single-float :read-only t))
 
 (defmethod initialize-instance :after ((gtc gtc) &key)
-  (with-slots (stream version toc)
+  (with-slots (stream version toc manifest-name)
       gtc
     (when (input-stream-p stream)
       (let ((buffer (make-array 4 :element-type 'octet :initial-element 0)))
         (read-magic stream buffer *gtc-magic*)
         (setf version (read-version stream buffer)
-              toc (read-gtc-toc stream buffer))))))
+              toc (read-gtc-toc stream buffer)
+              manifest-name (data-field-of gtc :snp-manifest))))))
 
 (defmethod print-object ((gtc gtc) stream)
   (print-unreadable-object (gtc stream :type t :identity nil)

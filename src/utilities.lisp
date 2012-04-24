@@ -102,6 +102,11 @@ changed, is restored on leaving."
         (t
          name)))
 
+(defgeneric urn-p (uri)
+  (:method ((uri puri:uri))
+    (eql :urn (puri:uri-scheme uri)))
+  (:documentation "Returns T if URI is a URN, or NIL otherwise."))
+
 (defun follow (str pred &key (start 0) end)
   (let ((end (or end (length str))))
     (loop
