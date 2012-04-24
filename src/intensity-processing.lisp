@@ -47,8 +47,8 @@ Returns:
 
 ;; Implementation of GTC -> SIM with SNP vector metadata
 (defmethod copy-intensities :before ((gtc gtc) (sim sim) (snps vector)
-                                     &key key test)
-  (declare (ignorable key test))
+                                     &key key test name)
+  (declare (ignorable key test name))
   (with-slots (stream version name-size num-samples num-probes num-channels)
       sim
     (check-arguments (= 2 num-channels) (sim)
@@ -62,10 +62,10 @@ Returns:
                            num-probes num-snps)))))
 
 (defmethod copy-intensities ((gtc gtc) (sim sim) (snps vector)
-                             &key key test)
+                             &key key test name)
   (with-slots (stream name-size)
       sim
-    (let ((sample-name (data-field-of gtc :sample-name))
+    (let ((sample-name (or name (data-field-of gtc :sample-name)))
           (xforms (data-field-of gtc :normalization-xforms))
           (x-intensities (data-field-of gtc :x-intensities))
           (y-intensities (data-field-of gtc :y-intensities))
@@ -85,16 +85,23 @@ Returns:
   sim)
 
 (defmethod copy-intensities :after ((gtc gtc) (sim sim) (snps vector)
-                                    &key key test)
-  (declare (ignorable key test))
+                                    &key key test name)
+  (declare (ignorable key test name))
   (with-slots (num-samples)
       sim
     (incf num-samples)))
 
 ;;; Implementation of GTC -> SIM with SNP manifest metadata
 (defmethod copy-intensities ((gtc gtc) (sim sim) (manifest bpm)
-                             &key key test)
-  (copy-intensities gtc sim (snps-of manifest :key key :test test)))
+                             &key key test name)
+  (let ((gtc-name (manifest-name-of gtc))
+        (man-name (name-of manifest)))
+    (when (and gtc-name man-name)
+      (check-arguments (string= man-name gtc-name)
+                       (gtc manifest)
+                       "manifest ~s does not match the expected manifest ~s"
+                        gtc-name man-name)))
+  (copy-intensities gtc sim (snps-of manifest :key key :test test) :name name))
 
 ;;; Implementation of SIM -> Illuminus with SNP vector metadata
 (defmethod copy-intensities ((sim sim) (iln iln) (snps vector)
@@ -147,25 +154,32 @@ Returns:
   (copy-intensities sim iln (snps-of manifest :key key :test test)
                     :start start :end end))
 
-(defgeneric gtc-to-sim (sim-filespec manifest gtc-filespecs &key test key)
+(defgeneric gtc-to-sim (sim-filespec manifest sample-specs &key test key)
   (:documentation "Creates a new SIM file containing the aggregated
 intensity data from a list of GTC files.")
-  (:method (sim-filespec (manifest bpm) gtc-filespecs &key test key)
+  (:method (sim-filespec (manifest bpm) sample-specs &key test key)
     (with-sim (sim sim-filespec :direction :output :if-exists :supersede
                    :if-does-not-exist :create)
       (let ((snps (snps-of manifest :test test :key key))
-            (prev-manifest-name))
-        (dolist (gtc-filespec gtc-filespecs sim)
-          (with-gtc (gtc gtc-filespec)
-            (let ((manifest-name (data-field-of gtc :snp-manifest)))
-              (if (null prev-manifest-name)
-                  (setf prev-manifest-name manifest-name)
-                  (check-arguments (string= prev-manifest-name manifest-name)
-                                   (gtc-filespecs)
-                                   "manifest ~s does not match previous ~
-                                  manifest ~s" manifest-name
-                                  prev-manifest-name)))
-            (copy-intensities gtc sim snps))))
+            (prev-manifest-name (name-of manifest)))
+        (dolist (spec sample-specs sim)
+          (let* ((gtc-filespec (assocdr :result spec))
+                 (uri (assocdr :uri spec)))
+            (with-gtc (gtc gtc-filespec)
+              (let ((manifest-name (data-field-of gtc :snp-manifest))
+                    (gtc-name (data-field-of gtc :sample-name)))
+                (if (null prev-manifest-name)
+                    (setf prev-manifest-name manifest-name)
+                    (check-arguments (string= prev-manifest-name manifest-name)
+                                     (spec)
+                                     "manifest ~s does not match the expected ~
+                                      manifest ~s" manifest-name
+                                      prev-manifest-name))
+                (check-field (or (string= "" gtc-name)
+                                 (string= (puri:urn-nss uri) gtc-name))
+                             uri
+                             "conflict with sample name in GTC file"))
+              (copy-intensities gtc sim snps :name (format nil "~a" uri))))))
       sim)))
 
 (defgeneric sim-to-illuminus (illuminus-filespec manifest sim-filespec
