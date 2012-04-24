@@ -117,7 +117,8 @@
              (range (- end start))
              (intensity-size (intensity-size-of sim)))
         (check-arguments (<= start end num-probes) (start end num-probes)
-                         "must satisfy start <= end <= number of probes")
+                         "must satisfy start <= end <= number of probes (~d)"
+                         num-probes)
         (let ((name-buffer (make-array name-size :element-type 'octet
                                        :initial-element 0))
               (buffer (make-array (* range num-channels intensity-size)

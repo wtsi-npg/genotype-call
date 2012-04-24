@@ -57,7 +57,8 @@
   (write-char #\Tab stream)
   (princ (snp-position snp) stream)
   (write-char #\Tab stream)
-  (write-string (snp-alleles snp) stream))
+  (write-char (snp-allele-a snp) stream)
+  (write-char (snp-allele-b snp) stream))
 
 (defun write-illuminus-intensities (a b stream)
   (write-char #\Tab stream)
