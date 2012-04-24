@@ -74,6 +74,11 @@ designating a CLI class."
   (:documentation "gtc-to-sim --output <filename> --manifest <filename>
 [--chromosome <name>] <GTC filenames ...>"))
 
+(define-cli gtc-to-bed-cli (cli output-mixin manifest-mixin chromosome-mixin)
+  ()
+  (:documentation "gtc-to-bed --output <filename> --manifest <filename>
+[--chromosome <name>] <GTC filenames ...>"))
+
 (define-cli sim-to-illuminus-cli (cli input-mixin output-mixin manifest-mixin
                                       chromosome-mixin)
   ((start "start" :required-option nil :value-type 'integer
@@ -128,18 +133,24 @@ designating a CLI class."
             (write-line "Backtrace follows:" *error-output*)
             (error condition)))))))
 
+(defun make-gtc-to-command (gtc-to-fn)
+  (lambda (parsed-args &optional other)
+    (let ((output (option-value 'output parsed-args))
+          (manifest (load-bpm
+                     (option-value 'manifest parsed-args)))
+          (chromosome (option-value 'chromosome parsed-args)))
+      (if chromosome
+          (funcall gtc-to-fn output manifest other
+                   :test (make-chromosome-p
+                          manifest chromosome #'string=)
+                   :key #'snp-chromosome)
+          (funcall gtc-to-fn output manifest other)))))
+
 (register-command "gtc-to-sim" 'gtc-to-sim-cli
-                  (lambda (parsed-args &optional other)
-                    (let ((output (option-value 'output parsed-args))
-                          (manifest (load-bpm
-                                     (option-value 'manifest parsed-args)))
-                          (chromosome (option-value 'chromosome parsed-args)))
-                      (if chromosome
-                          (gtc-to-sim output manifest other
-                                      :test (make-chromosome-p
-                                             manifest chromosome #'string=)
-                                      :key #'snp-chromosome)
-                          (gtc-to-sim output manifest other)))))
+                  (make-gtc-to-command 'gtc-to-sim))
+
+(register-command "gtc-to-bed" 'gtc-to-bed-cli
+                  (make-gtc-to-command 'gtc-to-bed))
 
 (register-command "sim-to-illuminus" 'sim-to-illuminus-cli
                   (lambda (parsed-args &optional other)

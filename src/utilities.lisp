@@ -101,3 +101,10 @@ changed, is restored on leaving."
          *standard-output*)
         (t
          name)))
+
+(defun follow (str pred &key (start 0) end)
+  (let ((end (or end (length str))))
+    (loop
+       for i from start below end
+       while (funcall pred (char str i))
+       finally (return i))))
