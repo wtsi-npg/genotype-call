@@ -1,0 +1,79 @@
+
+* Convert intensities from GTC format to SIM format
+
+** Main success scenario
+   
+   1. Given a number of of GTC files, one per sample, plus
+      corresponding sample URNs and Infinium chip annotation.
+   2. For each GTC file
+      1. Determine that the chip design recorded in the file
+         corresponds to that expected.
+      2. Determine that the sample name recorded in the file
+         corresponds to the NSS of the supplied sample URN.
+      3. Extract the raw intensity values for the X and Y channel from
+         each into a vector and normalize them, if required.
+      4. Using the annotation, identify the set of SNPs to be
+         written. E.g. by chromosome.
+      5. From the annotation, find the index of each of these SNPs and
+         hence the corresponding index in the vector of intensity
+         values.
+      6. Write the sample URN into the SIM file.
+      7. Write the intensity values into the SIM file in row/sample major
+         order.
+   3. Write the number of samples and intensity values into the SIM
+      header.
+
+** Extensions
+
+   2. a. If the GTC file contains no recorded sample name, omit the URN
+         check rather than rejecting the sample. This scenario is
+         possible for GTC files created from externally-produced idat
+         files using Illumina's BeeLine software. These samples will not
+         be registered in the LIMS and it appears that BeeLine inserts an
+         empty string in that case.
+
+
+* Convert intensities from SIM format to Illuminus input format
+
+** Main success scenario
+
+   1. Given a SIM file containing intensity values for a number of
+      samples and Infinium chip annotation.
+   2. Determine that the number of SNPs described in the annotation is
+      approriate for the number of intensity values in the SIM
+      file. The SIM file may contain a values for only a subset of the
+      SNPs. To do this, the SNP annotation must be filtered by exactly
+      the same criteria that were used to create the SIM file. E.g. by
+      chromosome.
+   3. Given zero-based, half-open start- and end- indices into the SNP
+      rows within the SIM file, extract the intensity values for
+      every sample in this range to produce a matrix.
+   4. Rotate the matrix of intensity values from sample/row-major to
+      SNP/row-major, as required by the Illuminus genotype caller.
+   5. Write the intensity values, to an Illuminus input format file
+      (one row per SNP, one column per sample). This format requires
+      writing the sample identifiers (from the SIM file) and SNP name
+      and alleles (from the SNP annotation).
+
+
+* Convert genotype calls from GTC format to Plink BED format.
+
+** Main success scenario
+
+   1. Given a number of of GTC files, one per sample, plus
+      corresponding sample URNs and Infinium chip annotation.
+   2. For each GTC file
+      1. Determine that the chip design recorded in the file
+         corresponds to that expected.
+      2. Determine that the sample name recorded in the file
+         corresponds to the NSS of the supplied sample URN.
+      3. Extract the genotype call values, the results of the
+         Illuminus GenCall caller, into a vector.
+      4. Using the annotation, identify the set of SNPs to be
+         written. E.g. by chromosome.
+      5. From the annotation, find the index of each of these SNPs and
+         hence the corresponding index in the vector of call values.
+      6. Append the genotypes to an individual-major Plink BED format
+         file.
+      7. Append the sample URN to a Plink FAM format file.
+   3. Write the SNP annotation to a Plink BIM format file.
