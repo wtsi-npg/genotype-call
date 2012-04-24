@@ -53,21 +53,28 @@ Beadpool Manifest."
 (defclass bpm ()
   ((stream :initform nil :initarg :stream :reader stream-of
            :documentation "The manifest input stream.")
+   (name :initform nil :initarg :name :reader name-of)
    (snps :initform (make-array 0) :initarg :snps)
    (chromosomes :initform nil :initarg :chromosomes :reader chromosomes-of))
   (:documentation "An Illumina Beadpool Manifest."))
 
-(defmethod initialize-instance :after ((manifest bpm) &key)
-  (with-slots (snps)
+(defmethod initialize-instance :after ((manifest bpm) &key name)
+  (with-slots (stream (bpm-name name) snps)
       manifest
-    (setf snps (stable-sort
+    (setf bpm-name (cond (name
+                          name)
+                         ((subtypep (type-of stream) 'file-stream)
+                          (pathname-name (file-namestring stream)))
+                         (t
+                          nil))
+          snps (stable-sort
                 (normalize-snp-alleles (rank-norm-ids snps)) #'location<))))
 
 (defmethod print-object ((manifest bpm) stream)
   (print-unreadable-object (manifest stream :type t :identity nil)
-    (with-slots ((s stream) snps)
+    (with-slots ((s stream) (bpm-name name) snps)
         manifest
-      (format stream "~@[~a, ~]~d SNPs"
+      (format stream "~@[~a ~]~@[~a, ~]~d SNPs" bpm-name
               (when (subtypep (type-of s) 'file-stream)
                 (file-namestring s)) (length snps)))))
 
@@ -143,11 +150,11 @@ must be represented in MANIFEST."
     (lambda (arg)
       (funcall predicate chromosome arg))))
 
-(defun load-bpm (filespec &key strict-ordering)
+(defun load-bpm (filespec &key name strict-ordering)
   (with-open-file (stream filespec :external-format :ascii)
-    (read-bpm stream :strict-ordering strict-ordering)))
+    (read-bpm stream :strict-ordering strict-ordering :name name)))
 
-(defun read-bpm (stream &key (strict-ordering t))
+(defun read-bpm (stream &key name (strict-ordering t))
   "Returns a new BPM object from read STREAM."
   (check-arguments (streamp stream) (stream) "expected a stream argument")
   (let ((header (read-line stream t :eof)))
@@ -159,7 +166,7 @@ must be represented in MANIFEST."
           (chromosomes (make-hash-table :test #'equal)))
       (flet ((make-bpm ()
                (make-instance
-                'bpm :stream stream
+                'bpm :name name :stream stream
                 :snps (make-array (length snps) :initial-contents snps)
                 :chromosomes (loop
                                 for chr being the hash-keys of chromosomes
