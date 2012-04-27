@@ -23,25 +23,36 @@
                        &key (x 1) (y 3) (genotype "AA") (basecall "AA")
                        (score 100.f0))
   "Writes GTC files for a fake study."
-  (let ((bpm (load-bpm manifest-file :strict-ordering t)))
-    (with-open-file (names (make-pathname :name study-name :type "txt")
-                           :direction :output :if-exists :supersede
-                           :if-does-not-exist :create)
+  (let ((bpm (load-bpm manifest-file :strict-ordering t))
+        (meta-file (make-pathname :name study-name :type "json")))
+    (with-open-file (meta meta-file :direction :output :if-exists :supersede
+                          :if-does-not-exist :create)
       (loop
          for i from 0 below study-size
          for j = (num-snps-of bpm)
          for sample-name = (format nil "~a_~4,'0d" study-name i)
-         do (progn
-              (write-line sample-name names)
-              (write-gtc 
-               (make-pathname :name sample-name :type "gtc")
-               (pathname-name manifest-file)
-               sample-name
-               (make-array (* 2 j) :element-type 'uint16 :initial-element x)
-               (make-array (* 2 j) :element-type 'uint16 :initial-element y)
-               (make-array j :initial-element genotype)
-               (make-array j :initial-element basecall)
-               (make-array j :initial-element score)))))))
+         for sample-urn = (format nil "urn:wtsi:~a" sample-name)
+         for gtc-path = (make-pathname :name sample-name :type "gtc")
+         collect gtc-path into gtc-paths
+         collect (pairlis '(:result :uri :gender :gender-code)
+                          (list (pathstring gtc-path) sample-urn
+                                (if (oddp i)
+                                    "Male"
+                                    "Female")
+                                (if (oddp i)
+                                    1
+                                    2)))
+         into sample-meta
+         do (write-gtc
+             gtc-path (pathname-name manifest-file) sample-name
+             (make-array (* 2 j) :element-type 'uint16 :initial-element x)
+             (make-array (* 2 j) :element-type 'uint16 :initial-element y)
+             (make-array j :initial-element genotype)
+             (make-array j :initial-element basecall)
+             (make-array j :initial-element score))
+         finally (with-underscore-translation
+                   (json:encode-json sample-meta meta))
+           (return (values gtc-paths meta-file))))))
 
 (defun generate-manifest (filespec num-snps)
   "Writes a fake Beadpool Manifest for NUM-SNPS to FILESPEC."
