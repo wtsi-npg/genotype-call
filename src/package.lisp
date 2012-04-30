@@ -38,6 +38,8 @@
    #:snps-of
    #:num-snps-of
    #:valid-alleles-p
+   #:has-chromosome-p
+   #:chromosome-boundaries
 
    #:make-chromosome-p
 
