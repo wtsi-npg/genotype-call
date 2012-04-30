@@ -23,7 +23,7 @@
 
 (asdf:defsystem genotype-call
   :name "genotype-call"
-  :version "0.10.1"
+  :version "0.11.0"
   :author "Keith James"
   :licence "GPL v3"
   :depends-on (:deoxybyte-systems
