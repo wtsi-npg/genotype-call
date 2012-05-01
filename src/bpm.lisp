@@ -119,17 +119,20 @@ predicate TEST returns T.")
 
 (defgeneric chromosome-boundaries (manifest chromosome &key key test)
   (:documentation "Returns two values, being the indices of the first
-and last SNPs on CHROMOSOME in MANIFEST.")
+and last SNPs on CHROMOSOME in MANIFEST. If TEST filters out all the
+SNPs of CHROMOSOME, raises and error.")
   (:method ((manifest bpm) (chromosome string) &key key test)
     (check-arguments (has-chromosome-p manifest chromosome)
                      (chromosome)
-                     "expected one of ~a" (chromosomes-of manifest))
+                     "expected one of ~a" (chromosomes-of manifest ))
     (let* ((snps (snps-of manifest :key key :test test))
            (start (position chromosome snps :test #'string=
-                                :key #'snp-chromosome))
-           (end (position chromosome snps :test #'string=
-                          :key #'snp-chromosome :from-end t)))
-      (values start (when end (1+ end))))))
+                            :key #'snp-chromosome)))
+      (check-arguments (integerp start) (chromosome test)
+                       "chromosome has no boundaries; test filtered all SNPs")
+      (values start
+              (1+ (position chromosome snps :test #'string=
+                            :key #'snp-chromosome :from-end t))))))
 
 (defun cnv-probe-p (probe-name)
   "Returns T if the PROBE-NAME indicates a copy-number variation (CNV)

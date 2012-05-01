@@ -154,33 +154,10 @@
         (iota 10 1)))
 
 (addtest (genotype-call-tests) chromosome-boundaries/2
-  (mapc (lambda (chr start end)
-          (multiple-value-bind (s e)
-              (chromosome-boundaries *example-bpm* chr :key #'snp-chromosome
-                                     :test (lambda (x)
-                                             nil))
-            (ensure (null s))
-            (ensure (null e))))
-        (chromosomes-of *example-bpm*)
-        (loop repeat 10 collect nil)
-        (loop repeat 10 collect nil)))
-
-(addtest (genotype-call-tests) chromosome-boundaries/3
-  (mapc (lambda (chr start end)
-          (multiple-value-bind (s e)
-              (chromosome-boundaries *example-bpm* chr
-                                     :test #'(lambda (index)
-                                               (oddp index))
-                                     :key #'snp-index)
-            (ensure (eql start s)
-                    :report "expected start ~a, but found ~a"
-                    :arguments (start s))
-            (ensure (eql end e)
-                    :report "expected end ~a, but found ~a"
-                    :arguments (end e))))
-        (chromosomes-of *example-bpm*)
-        '(0 nil 1 nil 2 nil 3 nil 4)
-        '(1 nil 2 nil 3 nil 4 nil 5)))
+  (ensure-condition invalid-argument-error
+    (chromosome-boundaries *example-bpm* "1" :key #'snp-chromosome
+                           :test (lambda (x)
+                                   (string= x "no such chromosome")))))
 
 (addtest (genotype-call-tests) normalize-allele/1
   (dolist (allele *possible-alleles*)
