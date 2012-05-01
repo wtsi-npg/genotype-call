@@ -175,6 +175,10 @@ designating a CLI class."
                       (if chromosome
                           (multiple-value-bind (cstart cend)
                               (chromosome-boundaries manifest chromosome)
+                            (check-arguments (<= 0 start end (- cend cstart))
+                                             (chromosome start end)
+                                             "must satisfy 0 <= start <= ~d for chromosome ~s"
+                                             (- cend cstart) chromosome)
                             (sim-to-illuminus output manifest input
                                               :start (+ cstart start)
                                               :end (min cend (+ cstart end))))
