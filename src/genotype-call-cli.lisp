@@ -71,9 +71,10 @@ designating a CLI class."
 
 (define-cli gtc-to-sim-cli (cli input-mixin output-mixin manifest-mixin
                                 chromosome-mixin)
-  ()
+  ((metadata "metadata" :required-option nil :value-type 'string
+             :documentation "The chromosome metadata JSON file."))
   (:documentation "gtc-to-sim --input <filename> --output <filename>
---manifest <filename> [--chromosome <name>]"))
+--manifest <filename> [--metadata <filename>] [--chromosome <name>]"))
 
 (define-cli gtc-to-bed-cli (cli input-mixin output-mixin manifest-mixin
                                 chromosome-mixin)
@@ -142,7 +143,10 @@ designating a CLI class."
                   (option-value 'input parsed-args)))
           (output (option-value 'output parsed-args))
           (manifest (load-bpm (option-value 'manifest parsed-args)))
+          (meta-file (option-value 'metadata parsed-args))
           (chromosome (option-value 'chromosome parsed-args)))
+      (when meta-file
+        (save-chromsome-specs meta-file manifest))
       (let ((specs (if (streamp input)
                        (read-json-sample-specs input)
                        (with-open-file (in input)
