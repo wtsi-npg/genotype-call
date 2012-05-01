@@ -154,7 +154,8 @@ Returns:
 
 (defgeneric gtc-to-sim (sim-filespec manifest sample-specs &key test key)
   (:documentation "Creates a new SIM file containing the aggregated
-intensity data from a list of GTC files.")
+intensity data from a list of GTC files. Writes a JSON file containing the
+chromsome boundaries (in terms of SNP columns)")
   (:method (sim-filespec (manifest bpm) sample-specs &key test key)
     (with-sim (sim sim-filespec :direction :output :if-exists :supersede
                    :if-does-not-exist :create)

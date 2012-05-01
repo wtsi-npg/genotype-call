@@ -23,7 +23,7 @@
 
 (asdf:defsystem genotype-call
   :name "genotype-call"
-  :version "0.11.0"
+  :version "0.12.0"
   :author "Keith James"
   :licence "GPL v3"
   :depends-on (:deoxybyte-systems
@@ -36,6 +36,7 @@
                         :pathname "src/"
                         :components ((:file "package")
                                      (:file "utilities")
+                                     (:file "json")
                                      (:file "gtc")
                                      (:file "bpm")
                                      (:file "sim")
@@ -43,7 +44,6 @@
                                      (:file "bed")
                                      (:file "bim")
                                      (:file "fam")
-                                     (:file "json")
                                      (:file "intensity-processing")
                                      (:file "genotype-processing")
                                      (:file "gtc-building")

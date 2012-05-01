@@ -50,8 +50,7 @@
              (make-array j :initial-element genotype)
              (make-array j :initial-element basecall)
              (make-array j :initial-element score))
-         finally (with-underscore-translation
-                   (json:encode-json sample-meta meta))
+         finally (write-json-sample-specs sample-meta meta)
            (return (values gtc-paths meta-file))))))
 
 (defun generate-manifest (filespec num-snps)

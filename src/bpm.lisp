@@ -127,12 +127,35 @@ SNPs of CHROMOSOME, raises and error.")
                      "expected one of ~a" (chromosomes-of manifest ))
     (let* ((snps (snps-of manifest :key key :test test))
            (start (position chromosome snps :test #'string=
-                            :key #'snp-chromosome)))
+                            :key #'snp-chromosome))
+           (end (position chromosome snps :test #'string=
+                          :key #'snp-chromosome :from-end t)))
       (check-arguments (integerp start) (chromosome test)
                        "chromosome has no boundaries; test filtered all SNPs")
-      (values start
-              (1+ (position chromosome snps :test #'string=
-                            :key #'snp-chromosome :from-end t))))))
+      (values start (1+ end)))))
+
+(defgeneric save-chromsome-specs (filespec manifest &key key test)
+  (:documentation "Writes JSON data to FILESPEC describing the SNP
+index boundaries of each chromsome represented in MANIFEST. The
+results is written an array containing object each having key a
+\"chromosome\" with a string value and keys \"start\" and \"end\" with
+integer values. If TEST filters out all the SNPs of any chromosome,
+the chromsome is still recorded, but the start and end values are
+NIL.")
+  (:method (filespec (manifest bpm) &key key test)
+    (with-open-file (out filespec :direction :output :if-exists :supersede
+                         :if-does-not-exist :create)
+      (loop
+         with snps = (snps-of manifest :key key :test test)
+         for chr in (chromosomes-of manifest)
+         for start = (position chr snps :test #'string= :key #'snp-chromosome)
+         for end = (position chr snps :test #'string= :key #'snp-chromosome
+                             :from-end t)
+         collect (pairlis '(:chromosome :start :end)
+                          (list chr start (1+ end))) into specs
+         finally (with-underscore-translation
+                   (json:encode-json specs out)
+                   (return specs))))))
 
 (defun cnv-probe-p (probe-name)
   "Returns T if the PROBE-NAME indicates a copy-number variation (CNV)

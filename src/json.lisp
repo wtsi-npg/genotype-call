@@ -43,6 +43,10 @@
   (with-underscore-translation
     (mapcar #'ensure-sample-urn (json:decode-json stream))))
 
+(defun write-json-sample-specs (sample-meta stream)
+  (with-underscore-translation
+    (json:encode-json sample-meta stream)))
+
 (defun ensure-sample-urn (spec)
   (let ((uri (assocdr :uri spec))
         (spec-str (json:encode-json-to-string spec)))
