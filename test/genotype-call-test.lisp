@@ -139,6 +139,18 @@
     (ensure-condition (malformed-file-error)
       (read-bpm stream :strict-ordering t))))
 
+(addtest (genotype-call-tests) location</1
+  (ensure (not (location< (make-snp 1 "x" "1" 1000 #\A #\A #\+ #\+ 0)
+                          (make-snp 1 "x" "1" 1000 #\A #\A #\+ #\+ 0))))
+  (ensure (location< (make-snp 1 "x" "1" 1000 #\A #\A #\+ #\+ 0)
+                     (make-snp 1 "x" "1" 1001 #\A #\A #\+ #\+ 0)))
+  (ensure (not (location< (make-snp 1 "x" "1" 1001 #\A #\A #\+ #\+ 0)
+                          (make-snp 1 "x" "1" 1000 #\A #\A #\+ #\+ 0))))
+  (ensure (location< (make-snp 1 "x" "2" 1000 #\A #\A #\+ #\+ 0)
+                     (make-snp 1 "x" "10" 1000 #\A #\A #\+ #\+ 0)))
+  (ensure (location< (make-snp 1 "x" "2" 1001 #\A #\A #\+ #\+ 0)
+                     (make-snp 1 "x" "10" 1000 #\A #\A #\+ #\+ 0))))
+
 (addtest (genotype-call-tests) chromosome-boundaries/1
   (mapc (lambda (chr start end)
           (multiple-value-bind (s e)

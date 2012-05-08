@@ -40,10 +40,12 @@
    #:valid-alleles-p
    #:has-chromosome-p
    #:chromosome-boundaries
+   #:location<
 
    #:make-chromosome-p
 
    ;; SNP
+   #:make-snp
    #:snp
    #:snp-index
    #:snp-name
@@ -54,7 +56,7 @@
    #:snp-cust-strand
    #:snp-norm-id
    #:snp-norm-rank
-   
+
    ;; GTC
    #:gtc
    #:with-gtc

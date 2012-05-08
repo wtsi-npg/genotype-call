@@ -78,9 +78,10 @@ designating a CLI class."
 
 (define-cli gtc-to-bed-cli (cli input-mixin output-mixin manifest-mixin
                                 chromosome-mixin)
-  ()
+  ((metadata "metadata" :required-option nil :value-type 'string
+             :documentation "The chromosome metadata JSON file."))
   (:documentation "gtc-to-bed --input <filename> --output <filename>
---manifest <filename> [--chromosome <name>]"))
+--manifest <filename> [--metadata <filename>] [--chromosome <name>]"))
 
 (define-cli sim-to-illuminus-cli (cli input-mixin output-mixin manifest-mixin
                                       chromosome-mixin)

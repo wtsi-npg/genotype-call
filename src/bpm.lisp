@@ -325,7 +325,12 @@ strand to allele character C."
 (defun location< (snp1 snp2)
   (let ((chr1 (snp-chromosome snp1))
         (chr2 (snp-chromosome snp2)))
-    (and (chromosome< chr1 chr2) (< (snp-position snp1) (snp-position snp2)))))
+    (cond ((chromosome< chr1 chr2)
+           t)
+          ((string= chr1 chr2)
+           (< (snp-position snp1) (snp-position snp2)))
+          (t
+           nil))))
 
 (defun rank-norm-ids (snps)
   "Modifies vector SNPS containing all SNPs in the manifest,
