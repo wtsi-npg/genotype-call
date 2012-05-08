@@ -50,25 +50,24 @@
              (make-array j :initial-element genotype)
              (make-array j :initial-element basecall)
              (make-array j :initial-element score))
-         finally (with-underscore-translation
-                   (json:encode-json sample-meta meta))
+         finally (write-json-sample-specs sample-meta meta)
            (return (values gtc-paths meta-file))))))
 
 (defun generate-manifest (filespec num-snps)
   "Writes a fake Beadpool Manifest for NUM-SNPS to FILESPEC."
   (flet ((make-name (i)
            (format nil "snp~7,'0d" i))
-         (make-chr (i)
-           (1+ (rem i 23)))
          (make-pos (chr i)
            (+ (* chr (expt 10 6)) i)))
     (with-open-file (bpm filespec :direction :output :if-exists :supersede
                          :if-does-not-exist :create)
       (write-line *bpm-header* bpm)
       (do* ((i 0 (1+ i))
+            (per-chr (ceiling num-snps 23))
+            (this-chr 0 (1+ this-chr))
             (snp-index 1 (1+ snp-index))
             (name (make-name snp-index) (make-name snp-index))
-            (chromosome (make-chr i) (make-chr i))
+            (chromosome 1)
             (position (make-pos chromosome i) (make-pos chromosome i))
             (gentrain-score 1.f0)
             (snp "[G/A]")
@@ -76,6 +75,9 @@
             (customer-strand "TOP")
             (norm-id 1))
            ((= num-snps i) filespec)
+        (when (= per-chr this-chr)
+          (setf this-chr 0
+                chromosome (1+ chromosome)))
         (dolist (elt (intersperse (list snp-index
                                         name chromosome position
                                         gentrain-score snp

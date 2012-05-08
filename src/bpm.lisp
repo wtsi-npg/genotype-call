@@ -80,7 +80,7 @@ Beadpool Manifest."
 
 (defgeneric snps-of (manifest &key key test)
   (:documentation "Returns the SNPs described by MANIFEST, optionally
-restricting the count to only those SNPs for which predicate TEST
+restricting the result to only those SNPs for which predicate TEST
 returns T.")
   (:method ((manifest bpm) &key key test)
     (with-slots (snps)
@@ -117,18 +117,45 @@ predicate TEST returns T.")
            (member chromosome (slot-value manifest 'chromosomes)
                    :test #'string=)))
 
-(defgeneric chromosome-boundaries (manifest chromosome)
+(defgeneric chromosome-boundaries (manifest chromosome &key key test)
   (:documentation "Returns two values, being the indices of the first
-and last SNPs on CHROMOSOME in MANIFEST.")
-  (:method ((manifest bpm) (chromosome string))
+and last SNPs on CHROMOSOME in MANIFEST. If TEST filters out all the
+SNPs of CHROMOSOME, raises and error.")
+  (:method ((manifest bpm) (chromosome string) &key key test)
     (check-arguments (has-chromosome-p manifest chromosome)
                      (chromosome)
-                     "expected one of ~a" (chromosomes-of manifest))
-    (let ((snps (snps-of manifest)))
-      (values
-       (position chromosome snps :test #'string= :key #'snp-chromosome)
-       (position chromosome snps :test #'string= :key #'snp-chromosome
-                 :from-end t)))))
+                     "expected one of ~a" (chromosomes-of manifest ))
+    (let* ((snps (snps-of manifest :key key :test test))
+           (start (position chromosome snps :test #'string=
+                            :key #'snp-chromosome))
+           (end (position chromosome snps :test #'string=
+                          :key #'snp-chromosome :from-end t)))
+      (check-arguments (integerp start) (chromosome test)
+                       "chromosome has no boundaries; test filtered all SNPs")
+      (values start (1+ end)))))
+
+(defgeneric save-chromsome-specs (filespec manifest &key key test)
+  (:documentation "Writes JSON data to FILESPEC describing the SNP
+index boundaries of each chromsome represented in MANIFEST. The
+results is written an array containing object each having key a
+\"chromosome\" with a string value and keys \"start\" and \"end\" with
+integer values. If TEST filters out all the SNPs of any chromosome,
+the chromsome is still recorded, but the start and end values are
+NIL.")
+  (:method (filespec (manifest bpm) &key key test)
+    (with-open-file (out filespec :direction :output :if-exists :supersede
+                         :if-does-not-exist :create)
+      (loop
+         with snps = (snps-of manifest :key key :test test)
+         for chr in (chromosomes-of manifest)
+         for start = (position chr snps :test #'string= :key #'snp-chromosome)
+         for end = (position chr snps :test #'string= :key #'snp-chromosome
+                             :from-end t)
+         collect (pairlis '(:chromosome :start :end)
+                          (list chr start (1+ end))) into specs
+         finally (with-underscore-translation
+                   (json:encode-json specs out)
+                   (return specs))))))
 
 (defun cnv-probe-p (probe-name)
   "Returns T if the PROBE-NAME indicates a copy-number variation (CNV)
@@ -171,7 +198,7 @@ must be represented in MANIFEST."
                 :chromosomes (loop
                                 for chr being the hash-keys of chromosomes
                                 collect chr into chrs
-                                finally (return (sort chrs #'string<))))))
+                                finally (return (sort chrs #'chromosome<))))))
         (do ((line (read-line stream nil :eof) (read-line stream nil :eof))
              (i 0 (1+ i)))
             ((eql :eof line) (make-bpm))
@@ -288,12 +315,22 @@ strand to allele character C."
     ((#\T #\+ #\-) allele)
     (#\B (complement-allele allele))))
 
+(defun chromosome< (chr1 chr2)
+  (let ((n1 (parse-integer chr1 :junk-allowed t))
+        (n2 (parse-integer chr2 :junk-allowed t)))
+    (if (and n1 n2)
+        (< n1 n2)
+        (string< chr1 chr2))))
+
 (defun location< (snp1 snp2)
   (let ((chr1 (snp-chromosome snp1))
         (chr2 (snp-chromosome snp2)))
-    (if (string= chr1 chr2)
-        (< (snp-position snp1) (snp-position snp2))
-        (string< chr1 chr2))))
+    (cond ((chromosome< chr1 chr2)
+           t)
+          ((string= chr1 chr2)
+           (< (snp-position snp1) (snp-position snp2)))
+          (t
+           nil))))
 
 (defun rank-norm-ids (snps)
   "Modifies vector SNPS containing all SNPs in the manifest,

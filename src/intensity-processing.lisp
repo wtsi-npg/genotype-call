@@ -105,22 +105,19 @@ Returns:
 
 ;;; Implementation of SIM -> Illuminus with SNP vector metadata
 (defmethod copy-intensities ((sim sim) (iln iln) (snps vector)
-                             &key key test (start 0) end)
+                             &key (start 0) end)
   (with-slots (num-samples num-probes num-channels)
       sim
-    (let ((snps (if test
-                    (remove-if test snps :key key)
-                    snps))
-          (end (or end num-probes)))
+    (let ((end (or end num-probes)))
       (check-arguments (and (integerp start) (not (minusp start))) (start)
                        "expected a non-negative integer")
       (check-arguments (and (integerp end) (not (minusp end))) (end)
                        "expected a non-negative integer")
       (check-arguments (<= 0 start end) (start end)
                        "start and end must satisfy 0 <= start <= end")
-      (check-arguments (= num-probes (length snps)) (sim snps key test)
-                       "~d annotations were selected for ~d probes"
-                       (length snps) num-probes)
+      (check-arguments (= num-probes (length snps)) (sim snps)
+                       "SIM holds data for ~d SNPS, but found ~d"
+                       num-probes (length snps))
       (let ((sample-names (make-array num-samples))
             (intensities (make-array num-samples)))
         (loop
@@ -148,6 +145,7 @@ Returns:
                      finally (terpri stream))))))))
   iln)
 
+
 ;;; Implementation of SIM -> Illuminus with SNP manifest metadata
 (defmethod copy-intensities ((sim sim) (iln iln) (manifest bpm)
                              &key key test (start 0) end)
@@ -156,7 +154,8 @@ Returns:
 
 (defgeneric gtc-to-sim (sim-filespec manifest sample-specs &key test key)
   (:documentation "Creates a new SIM file containing the aggregated
-intensity data from a list of GTC files.")
+intensity data from a list of GTC files. Writes a JSON file containing the
+chromsome boundaries (in terms of SNP columns)")
   (:method (sim-filespec (manifest bpm) sample-specs &key test key)
     (with-sim (sim sim-filespec :direction :output :if-exists :supersede
                    :if-does-not-exist :create)

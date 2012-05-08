@@ -117,7 +117,7 @@
                           (format nil "~d" x)) (iota 10 1))))
       (ensure (= 10 (num-snps-of manifest)))
       (let ((observed (chromosomes-of manifest))
-            (expected  (sort chrs #'string<)))
+            (expected chrs))
         (ensure (equal expected observed)
                 :report "expected ~a but found ~a"
                 :arguments (expected observed)))
@@ -138,6 +138,38 @@
   (with-open-file (stream (merge-pathnames "data/example_unsorted.bpm.csv"))
     (ensure-condition (malformed-file-error)
       (read-bpm stream :strict-ordering t))))
+
+(addtest (genotype-call-tests) location</1
+  (ensure (not (location< (make-snp 1 "x" "1" 1000 #\A #\A #\+ #\+ 0)
+                          (make-snp 1 "x" "1" 1000 #\A #\A #\+ #\+ 0))))
+  (ensure (location< (make-snp 1 "x" "1" 1000 #\A #\A #\+ #\+ 0)
+                     (make-snp 1 "x" "1" 1001 #\A #\A #\+ #\+ 0)))
+  (ensure (not (location< (make-snp 1 "x" "1" 1001 #\A #\A #\+ #\+ 0)
+                          (make-snp 1 "x" "1" 1000 #\A #\A #\+ #\+ 0))))
+  (ensure (location< (make-snp 1 "x" "2" 1000 #\A #\A #\+ #\+ 0)
+                     (make-snp 1 "x" "10" 1000 #\A #\A #\+ #\+ 0)))
+  (ensure (location< (make-snp 1 "x" "2" 1001 #\A #\A #\+ #\+ 0)
+                     (make-snp 1 "x" "10" 1000 #\A #\A #\+ #\+ 0))))
+
+(addtest (genotype-call-tests) chromosome-boundaries/1
+  (mapc (lambda (chr start end)
+          (multiple-value-bind (s e)
+              (chromosome-boundaries *example-bpm* chr)
+            (ensure (= start s)
+                    :report "expected start ~a, but found ~a"
+                    :arguments (start s))
+            (ensure (= end e)
+                    :report "expected end ~a, but found ~a"
+                    :arguments (end e))))
+        (chromosomes-of *example-bpm*)
+        (iota 10 0)
+        (iota 10 1)))
+
+(addtest (genotype-call-tests) chromosome-boundaries/2
+  (ensure-condition invalid-argument-error
+    (chromosome-boundaries *example-bpm* "1" :key #'snp-chromosome
+                           :test (lambda (x)
+                                   (string= x "no such chromosome")))))
 
 (addtest (genotype-call-tests) normalize-allele/1
   (dolist (allele *possible-alleles*)
@@ -358,6 +390,44 @@
                                   :key #'snp-index))
         (ensure-lines-equal
          (merge-pathnames "data/example_odd.iln") tmp-iln)))))
+
+(addtest (genotype-call-tests) sim-to-illuminus/3
+  (handler-bind ((test-condition #'leave-tmp-pathname))
+    (with-tmp-pathname (tmp-sim :tmpdir (merge-pathnames "data") :type "sim")
+      (let ((gtc-files '("data/example_0000.gtc" "data/example_0001.gtc"
+                         "data/example_0002.gtc" "data/example_0003.gtc"
+                         "data/example_0004.gtc")))
+        (with-sim (sim tmp-sim :direction :output :if-exists :supersede
+                       :if-does-not-exist :create)
+          (dolist (file gtc-files)
+            (with-gtc (gtc (merge-pathnames file))
+              (copy-intensities gtc sim *example-bpm*))))
+        ;; Test restricting to specific chromosomes
+        (dolist (chr (chromosomes-of *example-bpm*))
+          (multiple-value-bind (start end)
+              (chromosome-boundaries *example-bpm* chr)
+            (with-tmp-pathname (tmp-iln :tmpdir (merge-pathnames "data")
+                                        :type "iln")
+              (let ((iln (sim-to-illuminus tmp-iln *example-bpm* tmp-sim
+                                           :start start :end end)))
+                (ensure iln))
+              (let ((observed (with-open-file (s tmp-iln)
+                                (loop
+                                   for line = (read-line s nil nil)
+                                   while line
+                                   collect line into lines
+                                   finally (return (rest lines)))))
+                    (expected (with-open-file (s (merge-pathnames
+                                                  "data/example.iln"))
+                                (loop
+                                   for line = (read-line s nil nil)
+                                   while line
+                                   collect line into lines
+                                   finally (return (subseq (rest lines)
+                                                           start end))))))
+                (ensure (equalp expected observed)
+                        :report "expected ~a, but found ~a"
+                        :arguments (expected observed))))))))))
 
 (addtest (genotype-call-tests) gtc-to-bed/1
   (handler-bind ((test-condition #'leave-tmp-pathname))
