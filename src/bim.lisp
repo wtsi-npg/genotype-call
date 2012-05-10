@@ -19,9 +19,23 @@
 
 (in-package :uk.ac.sanger.genotype-call)
 
+(defun encode-bim-chromosome (chr)
+  "Returns a string that is the Plink BIM encoding for CHR (affects
+heterosomes and mitochondrial)."
+  (cond ((string= "X" chr)
+         "23")
+        ((string= "Y" chr)
+         "24")
+        ((string= "XY" chr)
+         "25")
+        ((string= "MT" chr)
+         "26")
+        (t
+         chr)))
+
 (defun write-bim-snp (snp stream)
   "Writes a Plink BIM (BInary Map) record of SNP to STREAM."
-  (write-string (snp-chromosome snp) stream)
+  (write-string (encode-bim-chromosome (snp-chromosome snp)) stream)
   (write-char #\Tab stream)
   (write-string (snp-name snp) stream)
   (write-char #\Tab stream)
