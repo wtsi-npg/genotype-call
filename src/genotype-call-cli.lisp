@@ -71,17 +71,23 @@ designating a CLI class."
 
 (define-cli gtc-to-sim-cli (cli input-mixin output-mixin manifest-mixin
                                 chromosome-mixin)
-  ((metadata "metadata" :required-option nil :value-type 'string
-             :documentation "The chromosome metadata JSON file."))
+  ((chr-meta "chromosome-meta" :required-option nil :value-type 'string
+             :documentation "The chromosome metadata JSON file.")
+   (snp-meta "snp-meta" :required-option nil :value-type 'string
+             :documentation "The SNP metadata JSON file."))
   (:documentation "gtc-to-sim --input <filename> --output <filename>
---manifest <filename> [--metadata <filename>] [--chromosome <name>]"))
+--manifest <filename> [--chromosome-meta <filename>] [--snp-meta <filename>]
+ [--chromosome <name>]"))
 
 (define-cli gtc-to-bed-cli (cli input-mixin output-mixin manifest-mixin
                                 chromosome-mixin)
-  ((metadata "metadata" :required-option nil :value-type 'string
-             :documentation "The chromosome metadata JSON file."))
+  ((chr-meta "chromosome-meta" :required-option nil :value-type 'string
+             :documentation "The chromosome metadata JSON file.")
+   (snp-meta "snp-meta" :required-option nil :value-type 'string
+             :documentation "The SNP metadata JSON file."))
   (:documentation "gtc-to-bed --input <filename> --output <filename>
---manifest <filename> [--metadata <filename>] [--chromosome <name>]"))
+--manifest <filename> [--chromosome-meta <filename>] [--snp-meta <filename>]
+ [--chromosome <name>]"))
 
 (define-cli sim-to-illuminus-cli (cli input-mixin output-mixin manifest-mixin
                                       chromosome-mixin)
@@ -144,10 +150,13 @@ designating a CLI class."
                   (option-value 'input parsed-args)))
           (output (option-value 'output parsed-args))
           (manifest (load-bpm (option-value 'manifest parsed-args)))
-          (meta-file (option-value 'metadata parsed-args))
+          (chr-meta-file (option-value 'chr-meta parsed-args))
+          (snp-meta-file (option-value 'snp-meta parsed-args))
           (chromosome (option-value 'chromosome parsed-args)))
-      (when meta-file
-        (save-chromsome-specs meta-file manifest))
+      (when chr-meta-file
+        (save-chromsome-specs chr-meta-file manifest))
+      (when snp-meta-file
+        (save-snp-specs snp-meta-file manifest))
       (let ((specs (if (streamp input)
                        (read-json-sample-specs input)
                        (with-open-file (in input)

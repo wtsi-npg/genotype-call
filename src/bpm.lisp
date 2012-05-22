@@ -137,7 +137,7 @@ SNPs of CHROMOSOME, raises and error.")
 (defgeneric save-chromsome-specs (filespec manifest &key key test)
   (:documentation "Writes JSON data to FILESPEC describing the SNP
 index boundaries of each chromsome represented in MANIFEST. The
-results is written an array containing object each having key a
+results are written an array containing object each having key a
 \"chromosome\" with a string value and keys \"start\" and \"end\" with
 integer values. If TEST filters out all the SNPs of any chromosome,
 the chromsome is still recorded, but the start and end values are
@@ -156,6 +156,25 @@ NIL.")
          finally (with-underscore-translation
                    (json:encode-json specs out)
                    (return specs))))))
+
+(defgeneric save-snp-specs (filespec manifest &key key test)
+   (:documentation "Writes JSON data to FILESPEC describing the SNP
+physical positions represented in MANIFEST. The results are written an
+array containing object each having keys \"name\" and \"chromosome\"
+with string values and key \"position\" with an integer value.")
+   (:method (filespec (manifest bpm) &key key test)
+     (with-open-file (out filespec :direction :output :if-exists :supersede
+                          :if-does-not-exist :create)
+       (loop
+          with snps = (snps-of manifest :key key :test test)
+          for snp across snps
+          collect (pairlis '(:name :chromosome :position)
+                           (list (snp-name snp)
+                                 (encode-bim-chromosome (snp-chromosome snp))
+                                 (snp-position snp))) into specs
+          finally (with-underscore-translation
+                    (json:encode-json specs out)
+                    (return specs))))))
 
 (defun cnv-probe-p (probe-name)
   "Returns T if the PROBE-NAME indicates a copy-number variation (CNV)
