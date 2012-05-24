@@ -98,6 +98,16 @@ designating a CLI class."
   (:documentation "sim-to-illuminus --input <filename> --output <filename>
 --manifest <filename> [--chromosome <name>]"))
 
+(define-cli sim-to-genosnp-cli (cli input-mixin output-mixin manifest-mixin)
+  ((start "start" :required-option nil :value-type 'integer
+          :documentation "The start of the range of samples to process.")
+   (end "end" :required-option nil :value-type 'integer
+        :documentation "The end of the range of samples to process.")
+   (snp-meta "snp-meta" :required-option nil :value-type 'string
+             :documentation "The GenoSNP SNP annotation file."))
+  (:documentation "sim-to-genosnp --input <filename> --output <filename>
+--manifest <filename>"))
+
 (define-cli mock-study-cli (cli manifest-mixin)
   ((study-name "study-name" :required-option t :value-type 'string
                :documentation "The name of the study, used in file naming.")
@@ -198,6 +208,23 @@ designating a CLI class."
                                               :end (min cend (+ cstart end))))
                           (sim-to-illuminus output manifest input
                                             :start start :end end)))))
+
+(register-command "sim-to-genosnp" 'sim-to-genosnp-cli
+                  (lambda (parsed-args &optional other)
+                    (declare (ignorable other))
+                    (let ((input (maybe-standard-stream
+                                  (option-value 'input parsed-args)))
+                          (output (maybe-standard-stream
+                                   (option-value 'output parsed-args)))
+                          (manifest (load-bpm
+                                     (option-value 'manifest parsed-args)))
+                          (start (or (option-value 'start parsed-args) 0))
+                          (end (option-value 'end parsed-args))
+                          (snp-meta-file (option-value 'snp-meta parsed-args)))
+                         (when snp-meta-file
+                           (save-genosnp-snps snp-meta-file manifest))
+                         (sim-to-genosnp output manifest input
+                                         :start start :end end))))
 
 (register-command "mock-study" 'mock-study-cli
                   (lambda (parsed-args &optional other)

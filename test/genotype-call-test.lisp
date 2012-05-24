@@ -38,9 +38,17 @@
   (load-bpm (merge-pathnames "data/alternative.bpm.csv")
             :name "alternative.bpm"))
 
+(defparameter *example-normalized-sim*
+  (merge-pathnames "data/example.normalized.sim"))
+
+(defparameter *example-raw-sim*
+  (merge-pathnames "data/example.raw.sim"))
+
+
 ;; To check the SIM file contents:
 ;;
-;;  hexdump -v -s 16 -e '1/255 "%s" ": " 20/4 " %0.12f" "\n"' example.sim
+;;  hexdump -v -s 16 -e '1/255 "%s" ": " 20/4 " %0.12f" "\n"' \
+;;    example.normalized.sim
 ;;
 (defparameter *sim-intensities-hexdump*
   '(0.034164227545 0.074980102479
@@ -93,9 +101,9 @@
               :arguments (e o)))))
 
 (defun example-gtc-specs ()
-  (mapcar (lambda (file uri)
-            (pairlis '(:result :uri)
-                     (list file (puri:uri uri))))
+  (mapcar (lambda (file uri gender)
+            (pairlis '(:result :uri :gender)
+                     (list file (puri:uri uri) gender)))
           '("data/example_0000.gtc"
             "data/example_0001.gtc"
             "data/example_0002.gtc"
@@ -105,7 +113,8 @@
             "urn:wtsi:example_0001"
             "urn:wtsi:example_0002"
             "urn:wtsi:example_0003"
-            "urn:wtsi:example_0004")))
+            "urn:wtsi:example_0004")
+          '(0 1 1 2 2)))
 
 (deftestsuite genotype-call-tests ()
   ())
@@ -254,8 +263,7 @@
       (ensure (and (vectorp scores) (floatp (aref scores 0)))))))
 
 (addtest (genotype-call-tests) sim-open-close/1
-  (with-open-file (stream (merge-pathnames "data/example.sim")
-                          :element-type 'octet)
+  (with-open-file (stream *example-normalized-sim* :element-type 'octet)
     (let ((sim (sim-open stream)))
       (ensure sim)
       (ensure (= 1 (version-of sim)))
@@ -264,12 +272,12 @@
 (addtest (genotype-call-tests) sim-closed-stream/1
   (ensure-condition (invalid-operation-error)
     (make-instance 'sim :stream (with-open-file
-                                    (stream (merge-pathnames "data/example.sim")
+                                    (stream *example-normalized-sim*
                                             :element-type 'octet)
                                   stream))))
 
 (addtest (genotype-call-tests) with-sim/1
-  (with-sim (sim (merge-pathnames "data/example.sim"))
+  (with-sim (sim *example-normalized-sim*)
     (ensure sim)
     (ensure (= 1 (version-of sim)))
     (ensure (= 255 (name-size-of sim)))
@@ -278,8 +286,18 @@
     (ensure (= 2 (num-channels-of sim)))
     (ensure (eql 'single-float (format-of sim)))))
 
+(addtest (genotype-call-tests) with-sim/2
+  (with-sim (sim *example-raw-sim*)
+    (ensure sim)
+    (ensure (= 1 (version-of sim)))
+    (ensure (= 255 (name-size-of sim)))
+    (ensure (= 5 (num-samples-of sim)))
+    (ensure (= 10 (num-probes-of sim)))
+    (ensure (= 2 (num-channels-of sim)))
+    (ensure (eql 'uint16 (format-of sim)))))
+
 (addtest (genotype-call-tests) read-intensities/1
-  (with-sim (sim (merge-pathnames "data/example.sim"))
+  (with-sim (sim *example-normalized-sim*)
     (dotimes (n (num-samples-of sim))
       (multiple-value-bind (intensities sample-name)
           (read-intensities sim)
@@ -292,40 +310,40 @@
   ;; :start argument only
   (loop
      for i from 0 below 10
-     do (with-sim (sim (merge-pathnames "data/example.sim"))
+     do (with-sim (sim *example-normalized-sim*)
           (compare-intensities (subseq *sim-intensities-hexdump* (* 2 i))
                                (read-intensities sim :start i))))
   ;; :end argument only
   (loop
      for i from 0 below 10
-     do (with-sim (sim (merge-pathnames "data/example.sim"))
+     do (with-sim (sim *example-normalized-sim*)
           (compare-intensities (subseq *sim-intensities-hexdump* 0 (* 2 i))
                                (read-intensities sim :end i))))
   ;; both :start and :end arguments
   (loop
      for i from 0 below 8
      for j from 2 below 10
-     do (with-sim (sim (merge-pathnames "data/example.sim"))
+     do (with-sim (sim *example-normalized-sim*)
           (compare-intensities
            (subseq *sim-intensities-hexdump* (* 2 i) (* 2 j))
            (read-intensities sim :start i :end j)))))
 
 (addtest (genotype-call-tests) read-intensities/3
   ;; single intensity channel set
-  (with-sim (sim (merge-pathnames "data/example.sim"))
+  (with-sim (sim *example-normalized-sim*)
     (ensure (= (num-channels-of sim)
                (length (read-intensities sim :start 0 :end 1)))))
   ;; start < 0
-  (with-sim (sim (merge-pathnames "data/example.sim"))
+  (with-sim (sim *example-normalized-sim*)
     (ensure-condition (invalid-argument-error)
       (read-intensities sim :start -1)))
   ;; end == start
-  (with-sim (sim (merge-pathnames "data/example.sim"))
+  (with-sim (sim *example-normalized-sim*)
     (let ((intensities (read-intensities sim :start 0 :end 0)))
       (ensure (vectorp intensities))
       (ensure (zerop (length intensities)))))
    ;; end < start
-   (with-sim (sim (merge-pathnames "data/example.sim"))
+   (with-sim (sim *example-normalized-sim*)
      (ensure-condition (invalid-argument-error)
        (read-intensities sim :start 0 :end -1))))
 
@@ -428,6 +446,24 @@
                 (ensure (equalp expected observed)
                         :report "expected ~a, but found ~a"
                         :arguments (expected observed))))))))))
+
+(addtest (genotype-call-tests) sim-to-genosnp/1
+  (handler-bind ((test-condition #'leave-tmp-pathname))
+    (with-tmp-pathname (tmp-sim :tmpdir (merge-pathnames "data") :type "sim")
+      (let ((gtc-files '("data/example_0000.gtc" "data/example_0001.gtc"
+                         "data/example_0002.gtc" "data/example_0003.gtc"
+                         "data/example_0004.gtc")))
+        (with-sim (sim tmp-sim :direction :output :if-exists :supersede
+                       :if-does-not-exist :create :format 'uint16)
+          (dolist (file gtc-files)
+            (with-gtc (gtc (merge-pathnames file))
+              (copy-intensities gtc sim *example-bpm* :normalize nil))))
+        (with-tmp-pathname (tmp-gsn :tmpdir (merge-pathnames "data")
+                                    :type "gsn")
+          (let ((gsn (sim-to-genosnp tmp-gsn *example-bpm* tmp-sim)))
+            (ensure gsn))
+          (ensure-lines-equal
+           (merge-pathnames "data/example.raw.gsn") tmp-gsn))))))
 
 (addtest (genotype-call-tests) gtc-to-bed/1
   (handler-bind ((test-condition #'leave-tmp-pathname))

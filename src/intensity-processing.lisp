@@ -47,8 +47,8 @@ Returns:
 
 ;; Implementation of GTC -> SIM with SNP vector metadata
 (defmethod copy-intensities :before ((gtc gtc) (sim sim) (snps vector)
-                                     &key key test name)
-  (declare (ignorable key test name))
+                                     &key key test name normalize)
+  (declare (ignorable key test name normalize))
   (with-slots (stream version name-size num-samples num-probes num-channels)
       sim
     (check-arguments (= 2 num-channels) (sim)
@@ -62,7 +62,7 @@ Returns:
                            num-probes num-snps)))))
 
 (defmethod copy-intensities ((gtc gtc) (sim sim) (snps vector)
-                             &key key test name)
+                             &key key test name (normalize t))
   (with-slots (stream name-size)
       sim
     (let ((sample-name (or name (data-field-of gtc :sample-name)))
@@ -77,23 +77,31 @@ Returns:
                        (txt "sample name ~s is too long to fit in SIM file"
                             "with limit of ~d characters")
                        sample-name name-size)
+      (check-arguments (or (and normalize (= 4 isize))
+                           (and (not normalize) (= 2 isize))) (sim normalize)
+                           (txt "SIM must be 4 bytes per channel for"
+                                "normalized and 2 bytes per channel for raw"
+                                "intensities"))
       (write-sequence (string-to-octets sample-name) stream)
       (dotimes (n (- name-size (length sample-name))) ; pad the name
         (write-byte 0 stream))
-      (write-2channel-intensities snps x-intensities y-intensities
-                                  isize xforms stream)))
+      (if normalize
+          (write-norm-2channel-intensities snps x-intensities y-intensities
+                                           xforms stream)
+          (write-raw-2channel-intensities snps x-intensities y-intensities
+                                          stream))))
   sim)
 
 (defmethod copy-intensities :after ((gtc gtc) (sim sim) (snps vector)
-                                    &key key test name)
-  (declare (ignorable key test name))
+                                    &key key test name normalize)
+  (declare (ignorable key test name normalize))
   (with-slots (num-samples)
       sim
     (incf num-samples)))
 
 ;;; Implementation of GTC -> SIM with SNP manifest metadata
 (defmethod copy-intensities ((gtc gtc) (sim sim) (manifest bpm)
-                             &key key test name)
+                             &key key test name (normalize t))
   (let ((gtc-name (manifest-name-of gtc))
         (man-name (name-of manifest)))
     (when (and gtc-name man-name)
@@ -101,12 +109,13 @@ Returns:
                        (gtc manifest)
                        "manifest ~s does not match the expected manifest ~s"
                         gtc-name man-name)))
-  (copy-intensities gtc sim (snps-of manifest :key key :test test) :name name))
+  (copy-intensities gtc sim (snps-of manifest :key key :test test)
+                    :name name :normalize normalize))
 
 ;;; Implementation of SIM -> Illuminus with SNP vector metadata
 (defmethod copy-intensities ((sim sim) (iln iln) (snps vector)
                              &key (start 0) end)
-  (with-slots (num-samples num-probes num-channels)
+  (with-slots (num-samples num-probes)
       sim
     (let ((end (or end num-probes)))
       (check-arguments (and (integerp start) (not (minusp start))) (start)
@@ -152,13 +161,58 @@ Returns:
   (copy-intensities sim iln (snps-of manifest :key key :test test)
                     :start start :end end))
 
-(defgeneric gtc-to-sim (sim-filespec manifest sample-specs &key test key)
+
+;;; Implementation of SIM -> GenoSNP with SNP vector metadata
+(defmethod copy-intensities ((sim sim) (gsn gsn) (snps vector)
+                             &key (start 0) end)
+  (with-slots (num-samples num-probes)
+      sim
+    (let ((end (or end num-samples)))
+      (check-arguments (and (integerp start) (not (minusp start))) (start)
+                       "expected a non-negative integer")
+      (check-arguments (and (integerp end) (not (minusp end))) (end)
+                       "expected a non-negative integer")
+      (check-arguments (<= 0 start end) (start end)
+                       "start and end must satisfy 0 <= start <= end")
+      (check-arguments (= num-probes (length snps)) (sim snps)
+                       "SIM holds data for ~d SNPS, but found ~d"
+                       num-probes (length snps))
+      (let ((stream (stream-of gsn))
+            (*print-pretty* nil))
+        ;; For each sample
+        (loop
+           for i from start below end
+           do (multiple-value-bind (sample-intensities sample-name)
+                  (read-intensities sim)
+                (write-genosnp-sample sample-name stream)
+                (loop
+                   for j from 0 below num-probes
+                   for k from 0 by 2    ; intensity index, in pairs
+                   do (write-genosnp-intensities
+                       (aref sample-intensities k)
+                       (aref sample-intensities (1+ k))
+                       stream)
+                   finally (terpri stream)))))))
+  gsn)
+
+;;; Implementation of SIM -> GenoSNP with SNP manifest metadata
+(defmethod copy-intensities ((sim sim) (gsn gsn) (manifest bpm)
+                             &key key test (start 0) end)
+  (copy-intensities sim gsn (snps-of manifest :key key :test test)
+                    :start start :end end))
+
+
+(defgeneric gtc-to-sim (sim-filespec manifest sample-specs
+                        &key test key normalize)
   (:documentation "Creates a new SIM file containing the aggregated
 intensity data from a list of GTC files. Writes a JSON file containing the
 chromsome boundaries (in terms of SNP columns)")
-  (:method (sim-filespec (manifest bpm) sample-specs &key test key)
+  (:method (sim-filespec (manifest bpm) sample-specs
+            &key test key (normalize t))
     (with-sim (sim sim-filespec :direction :output :if-exists :supersede
-                   :if-does-not-exist :create)
+                   :if-does-not-exist :create :format (if normalize
+                                                          'single-float
+                                                          'uint16))
       (let ((snps (snps-of manifest :test test :key key))
             (prev-manifest-name (name-of manifest)))
         (dolist (spec sample-specs sim)
@@ -177,8 +231,11 @@ chromsome boundaries (in terms of SNP columns)")
                 (check-field (or (string= "" gtc-name)
                                  (string= (puri:urn-nss uri) gtc-name))
                              uri
-                             "conflict with sample name in GTC file"))
-              (copy-intensities gtc sim snps :name (format nil "~a" uri))))))
+                             (puri:urn-nss uri)
+                             "conflict with sample name in GTC file '~a'"
+                             gtc-name))
+              (copy-intensities gtc sim snps :name (format nil "~a" uri)
+                                :normalize normalize)))))
       sim)))
 
 (defgeneric sim-to-illuminus (illuminus-filespec manifest sim-filespec
@@ -196,3 +253,20 @@ chromsome boundaries (in terms of SNP columns)")
                                   :if-does-not-exist :create)
         (copy-intensities sim (make-instance 'iln :stream stream) manifest
                           :key key :test test :start start :end end))))))
+
+(defgeneric sim-to-genosnp (genosnp-filespec manifest sim-filespec
+                            &key test key start end)
+
+  (:method (genosnp-filespec (manifest bpm) sim-filespec
+            &key test key (start 0) end)
+    (with-sim (sim sim-filespec)
+      (if (streamp genosnp-filespec)
+          (copy-intensities sim (make-instance 'gsn :stream genosnp-filespec)
+                            manifest :key key :test test
+                            :start start :end end)
+          (with-open-file (stream genosnp-filespec :direction :output
+                                  :external-format :ascii
+                                  :if-exists :supersede
+                                  :if-does-not-exist :create)
+            (copy-intensities sim (make-instance 'gsn :stream stream) manifest
+                              :key key :test test :start start :end end))))))
