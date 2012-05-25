@@ -62,7 +62,7 @@ Returns:
                            num-probes num-snps)))))
 
 (defmethod copy-intensities ((gtc gtc) (sim sim) (snps vector)
-                             &key key test name (normalize t))
+                             &key key test name normalize)
   (with-slots (stream name-size)
       sim
     (let ((sample-name (or name (data-field-of gtc :sample-name)))
@@ -101,7 +101,7 @@ Returns:
 
 ;;; Implementation of GTC -> SIM with SNP manifest metadata
 (defmethod copy-intensities ((gtc gtc) (sim sim) (manifest bpm)
-                             &key key test name (normalize t))
+                             &key key test name normalize)
   (let ((gtc-name (manifest-name-of gtc))
         (man-name (name-of manifest)))
     (when (and gtc-name man-name)
@@ -161,7 +161,6 @@ Returns:
   (copy-intensities sim iln (snps-of manifest :key key :test test)
                     :start start :end end))
 
-
 ;;; Implementation of SIM -> GenoSNP with SNP vector metadata
 (defmethod copy-intensities ((sim sim) (gsn gsn) (snps vector)
                              &key (start 0) end)
@@ -207,8 +206,7 @@ Returns:
   (:documentation "Creates a new SIM file containing the aggregated
 intensity data from a list of GTC files. Writes a JSON file containing the
 chromsome boundaries (in terms of SNP columns)")
-  (:method (sim-filespec (manifest bpm) sample-specs
-            &key test key (normalize t))
+  (:method (sim-filespec (manifest bpm) sample-specs &key test key normalize)
     (with-sim (sim sim-filespec :direction :output :if-exists :supersede
                    :if-does-not-exist :create :format (if normalize
                                                           'single-float

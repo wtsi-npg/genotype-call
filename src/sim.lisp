@@ -32,7 +32,7 @@
    (num-samples :initform 0 :initarg :num-samples :accessor num-samples-of)
    (num-probes :initform 0 :initarg :num-probes :reader num-probes-of)
    (num-channels :initform 2 :initarg :num-channels :reader num-channels-of)
-   (format :initform 'single-float :initarg :format :reader format-of)))
+   (format :initform 'uint16 :initarg :format :reader format-of)))
 
 (defmethod initialize-instance :after ((sim sim) &key)
   (with-slots (stream version name-size num-samples num-probes

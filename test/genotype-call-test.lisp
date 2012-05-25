@@ -354,10 +354,10 @@
                          "data/example_0002.gtc" "data/example_0003.gtc"
                          "data/example_0004.gtc")))
           (with-sim (sim tmp :direction :output :if-exists :supersede
-                         :if-does-not-exist :create)
+                         :if-does-not-exist :create :format 'single-float)
             (dolist (file gtc-files)
               (with-gtc (gtc (merge-pathnames file))
-                (ensure (copy-intensities gtc sim *example-bpm*))))
+                (ensure (copy-intensities gtc sim *example-bpm* :normalize t))))
             (ensure (= (length gtc-files) (num-samples-of sim))
                     :report "expected ~d, but found ~d"
                     :arguments ((length gtc-files) (num-samples-of sim))))
@@ -380,10 +380,10 @@
                          "data/example_0002.gtc" "data/example_0003.gtc"
                          "data/example_0004.gtc")))
         (with-sim (sim tmp-sim :direction :output :if-exists :supersede
-                       :if-does-not-exist :create)
+                       :if-does-not-exist :create :format 'single-float)
           (dolist (file gtc-files)
             (with-gtc (gtc (merge-pathnames file))
-              (copy-intensities gtc sim *example-bpm*))))
+              (copy-intensities gtc sim *example-bpm* :normalize t))))
         (with-tmp-pathname (tmp-iln :tmpdir (merge-pathnames "data")
                                     :type "iln")
           (let ((iln (sim-to-illuminus tmp-iln *example-bpm* tmp-sim)))
@@ -395,12 +395,13 @@
   (handler-bind ((test-condition #'leave-tmp-pathname))
     (with-tmp-pathname (tmp-sim :tmpdir (merge-pathnames "data") :type "sim")
       (with-sim (sim tmp-sim :direction :output :if-exists :supersede
-                     :if-does-not-exist :create)
+                     :if-does-not-exist :create :format 'single-float)
         (with-gtc (gtc (merge-pathnames "data/example_0000.gtc"))
           (copy-intensities gtc sim *example-bpm*
                             :test (lambda (index)
                                     (oddp index))
-                            :key #'snp-index)))
+                            :key #'snp-index
+                            :normalize t)))
       (with-tmp-pathname (tmp-iln :tmpdir (merge-pathnames "data") :type "iln")
         (ensure (sim-to-illuminus tmp-iln *example-bpm* tmp-sim
                                   :test #'(lambda (index)
@@ -416,10 +417,10 @@
                          "data/example_0002.gtc" "data/example_0003.gtc"
                          "data/example_0004.gtc")))
         (with-sim (sim tmp-sim :direction :output :if-exists :supersede
-                       :if-does-not-exist :create)
+                       :if-does-not-exist :create :format 'single-float)
           (dolist (file gtc-files)
             (with-gtc (gtc (merge-pathnames file))
-              (copy-intensities gtc sim *example-bpm*))))
+              (copy-intensities gtc sim *example-bpm* :normalize t))))
         ;; Test restricting to specific chromosomes
         (dolist (chr (chromosomes-of *example-bpm*))
           (multiple-value-bind (start end)

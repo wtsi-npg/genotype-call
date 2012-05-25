@@ -74,10 +74,12 @@ designating a CLI class."
   ((chr-meta "chromosome-meta" :required-option nil :value-type 'string
              :documentation "The chromosome metadata JSON file.")
    (snp-meta "snp-meta" :required-option nil :value-type 'string
-             :documentation "The SNP metadata JSON file."))
+             :documentation "The SNP metadata JSON file.")
+   (normalize "normalize" :value-type t
+              :documentation "Normalize the intensity values."))
   (:documentation "gtc-to-sim --input <filename> --output <filename>
 --manifest <filename> [--chromosome-meta <filename>] [--snp-meta <filename>]
- [--chromosome <name>]"))
+ [--chromosome <name>] [--normalize]"))
 
 (define-cli gtc-to-bed-cli (cli input-mixin output-mixin manifest-mixin
                                 chromosome-mixin)
@@ -102,11 +104,13 @@ designating a CLI class."
   ((start "start" :required-option nil :value-type 'integer
           :documentation "The start of the range of samples to process.")
    (end "end" :required-option nil :value-type 'integer
-        :documentation "The end of the range of samples to process.")
-   (snp-meta "snp-meta" :required-option nil :value-type 'string
-             :documentation "The GenoSNP SNP annotation file."))
+        :documentation "The end of the range of samples to process."))
   (:documentation "sim-to-genosnp --input <filename> --output <filename>
 --manifest <filename>"))
+
+(define-cli bpm-to-genosnp-cli (cli output-mixin manifest-mixin)
+  ()
+  (:documentation "bpm-to-genosnp --output <filename> --manifest <filename>"))
 
 (define-cli mock-study-cli (cli manifest-mixin)
   ((study-name "study-name" :required-option t :value-type 'string
@@ -153,8 +157,35 @@ designating a CLI class."
             (write-line "Backtrace follows:" *error-output*)
             (error condition)))))))
 
-(defun make-gtc-to-command (gtc-to-fn)
-  (lambda (parsed-args &optional other)
+(register-command
+ "gtc-to-sim" 'gtc-to-sim-cli
+ (lambda (parsed-args &optional other)
+   (declare (ignorable other))
+   (let ((input (maybe-standard-stream
+                 (option-value 'input parsed-args)))
+         (output (option-value 'output parsed-args))
+         (manifest (load-bpm (option-value 'manifest parsed-args)))
+         (chr-meta-file (option-value 'chr-meta parsed-args))
+         (snp-meta-file (option-value 'snp-meta parsed-args))
+         (chromosome (option-value 'chromosome parsed-args))
+         (normalize (option-value 'normalize parsed-args)))
+      (when chr-meta-file
+        (save-chromsome-specs chr-meta-file manifest))
+      (when snp-meta-file
+        (save-snp-specs snp-meta-file manifest))
+      (let ((specs (if (streamp input)
+                       (read-json-sample-specs input)
+                       (with-open-file (in input)
+                         (read-json-sample-specs in)))))
+        (if chromosome
+            (gtc-to-sim output manifest specs
+                        :test (make-chromosome-p manifest chromosome #'string=)
+                        :key #'snp-chromosome)
+            (gtc-to-sim output manifest specs :normalize normalize))))))
+
+(register-command
+ "gtc-to-bed" 'gtc-to-bed-cli
+ (lambda (parsed-args &optional other)
     (declare (ignorable other))
     (let ((input (maybe-standard-stream
                   (option-value 'input parsed-args)))
@@ -172,67 +203,58 @@ designating a CLI class."
                        (with-open-file (in input)
                          (read-json-sample-specs in)))))
         (if chromosome
-            (funcall gtc-to-fn output manifest specs
-                     :test (make-chromosome-p
-                            manifest chromosome #'string=)
-                     :key #'snp-chromosome)
-            (funcall gtc-to-fn output manifest specs))))))
+            (gtc-to-bed output manifest specs
+                        :test (make-chromosome-p manifest chromosome #'string=)
+                        :key #'snp-chromosome)
+            (gtc-to-bed output manifest specs))))))
 
-(register-command "gtc-to-sim" 'gtc-to-sim-cli
-                  (make-gtc-to-command 'gtc-to-sim))
+(register-command
+ "sim-to-illuminus" 'sim-to-illuminus-cli
+ (lambda (parsed-args &optional other)
+   (declare (ignorable other))
+   (let ((input (maybe-standard-stream (option-value 'input parsed-args)))
+         (output (maybe-standard-stream (option-value 'output parsed-args)))
+         (manifest (load-bpm (option-value 'manifest parsed-args)))
+         (chromosome (option-value 'chromosome parsed-args))
+         (start (or (option-value 'start parsed-args) 0))
+         (end (option-value 'end parsed-args)))
+     (if chromosome
+         (multiple-value-bind (cstart cend)
+             (chromosome-boundaries manifest chromosome)
+           (check-arguments (<= 0 start end (- cend cstart))
+                            (chromosome start end)
+                            "must satisfy 0 <= start <= ~d for chromosome ~s"
+                            (- cend cstart) chromosome)
+           (sim-to-illuminus output manifest input
+                             :start (+ cstart start)
+                             :end (min cend (+ cstart end))))
+         (sim-to-illuminus output manifest input :start start :end end)))))
 
-(register-command "gtc-to-bed" 'gtc-to-bed-cli
-                  (make-gtc-to-command 'gtc-to-bed))
+(register-command
+ "sim-to-genosnp" 'sim-to-genosnp-cli
+ (lambda (parsed-args &optional other)
+   (declare (ignorable other))
+   (let ((input (maybe-standard-stream (option-value 'input parsed-args)))
+         (output (maybe-standard-stream (option-value 'output parsed-args)))
+         (manifest (load-bpm (option-value 'manifest parsed-args)))
+         (start (or (option-value 'start parsed-args) 0))
+         (end (option-value 'end parsed-args)))
+     (sim-to-genosnp output manifest input :start start :end end))))
 
-(register-command "sim-to-illuminus" 'sim-to-illuminus-cli
-                  (lambda (parsed-args &optional other)
-                    (declare (ignorable other))
-                    (let ((input (maybe-standard-stream
-                                  (option-value 'input parsed-args)))
-                          (output (maybe-standard-stream
-                                   (option-value 'output parsed-args)))
-                          (manifest (load-bpm
-                                     (option-value 'manifest parsed-args)))
-                          (chromosome (option-value 'chromosome parsed-args))
-                          (start (or (option-value 'start parsed-args) 0))
-                          (end (option-value 'end parsed-args)))
-                      (if chromosome
-                          (multiple-value-bind (cstart cend)
-                              (chromosome-boundaries manifest chromosome)
-                            (check-arguments (<= 0 start end (- cend cstart))
-                                             (chromosome start end)
-                                             "must satisfy 0 <= start <= ~d for chromosome ~s"
-                                             (- cend cstart) chromosome)
-                            (sim-to-illuminus output manifest input
-                                              :start (+ cstart start)
-                                              :end (min cend (+ cstart end))))
-                          (sim-to-illuminus output manifest input
-                                            :start start :end end)))))
+(register-command
+ "bpm-to-genosnp" 'bpm-to-genosnp-cli
+ (lambda (parsed-args &optional other)
+   (declare (ignorable other))
+   (let ((output (maybe-standard-stream (option-value 'output parsed-args)))
+         (manifest (load-bpm (option-value 'manifest parsed-args))))
+     (save-genosnp-snps output manifest))))
 
-(register-command "sim-to-genosnp" 'sim-to-genosnp-cli
-                  (lambda (parsed-args &optional other)
-                    (declare (ignorable other))
-                    (let ((input (maybe-standard-stream
-                                  (option-value 'input parsed-args)))
-                          (output (maybe-standard-stream
-                                   (option-value 'output parsed-args)))
-                          (manifest (load-bpm
-                                     (option-value 'manifest parsed-args)))
-                          (start (or (option-value 'start parsed-args) 0))
-                          (end (option-value 'end parsed-args))
-                          (snp-meta-file (option-value 'snp-meta parsed-args)))
-                         (when snp-meta-file
-                           (save-genosnp-snps snp-meta-file manifest))
-                         (sim-to-genosnp output manifest input
-                                         :start start :end end))))
-
-(register-command "mock-study" 'mock-study-cli
-                  (lambda (parsed-args &optional other)
-                    (declare (ignorable other))
-                    (let ((manifest (option-value 'manifest parsed-args)))
-                      (generate-manifest
-                       manifest (option-value 'num-snps parsed-args))
-                      (generate-study
-                       (option-value 'study-name parsed-args)
-                       (option-value 'num-samples parsed-args)
-                       manifest))))
+(register-command
+ "mock-study" 'mock-study-cli
+ (lambda (parsed-args &optional other)
+   (declare (ignorable other))
+   (let ((manifest (option-value 'manifest parsed-args)))
+     (generate-manifest  manifest (option-value 'num-snps parsed-args))
+     (generate-study (option-value 'study-name parsed-args)
+                     (option-value 'num-samples parsed-args)
+                     manifest))))
