@@ -28,6 +28,8 @@
 (defvar *bed-individual-major* #b00000000
   "The Plink BED file flag byte for individual-major orientation.")
 
+(defvar *plink-unknown* "-9")
+
 (defclass bed ()
   ((stream :initform nil :initarg :stream :reader stream-of
            :documentation "The input or output stream.")
@@ -148,3 +150,53 @@ Returns:
 (defun encoded-bed-size (n)
   "Returns the number of whole bytes required to encode N genotypes."
   (ceiling n 4))
+
+(defun encode-bim-chromosome (chr)
+  "Returns a string that is the Plink BIM encoding for CHR (affects
+heterosomes and mitochondrial)."
+  (cond ((string= "X" chr)
+         "23")
+        ((string= "Y" chr)
+         "24")
+        ((string= "XY" chr)
+         "25")
+        ((string= "MT" chr)
+         "26")
+        (t
+         chr)))
+
+(defun write-bim-snp (snp stream)
+  "Writes a Plink BIM (BInary Map) record of SNP to STREAM."
+  (write-string (encode-bim-chromosome (snp-chromosome snp)) stream)
+  (write-char #\Tab stream)
+  (write-string (snp-name snp) stream)
+  (write-char #\Tab stream)
+  (princ 0 stream)                      ; genetic position
+  (write-char #\Tab stream)
+  (princ (snp-position snp) stream)     ; physical position
+  (write-char #\Tab stream)
+  (write-char (snp-allele-a snp) stream)
+  (write-char #\Tab stream)
+  (write-char (snp-allele-b snp) stream)
+  (terpri stream))
+
+;; Plink FAM format is the first 6 columns of Plink PED format. Note
+;; that it is not possible to start any family identifier with a '#'
+;; character because this is used to indicate a comment. (Plink format
+;; has no concept of escaping characters).
+
+(defun write-fam-individual (name stream &optional gender)
+  "Writes a Plink FAM record of an individual with NAME to STREAM."
+  (let ((gender (or gender *plink-unknown*)))
+    (write-string name stream)            ; family identifier
+    (write-char #\Tab stream)
+    (write-string name stream)            ; individual identifier
+    (write-char #\Tab stream)
+    (write-string *plink-unknown* stream) ; paternal identifier
+    (write-char #\Tab stream)
+    (write-string *plink-unknown* stream) ; maternal identifier
+    (write-char #\Tab stream)
+    (princ gender stream)     ; gender male=1, female=2, unknown=other
+    (write-char #\Tab stream)
+    (write-string *plink-unknown* stream) ; phenotype
+    (terpri stream)))

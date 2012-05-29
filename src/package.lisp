@@ -92,7 +92,7 @@
    #:copy-intensities
    #:gtc-to-sim
    #:sim-to-illuminus
-
+   #:sim-to-genosnp
    ;; Genotype processing
    #:copy-genotypes
    #:gtc-to-bed

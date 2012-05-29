@@ -32,7 +32,7 @@
    (num-samples :initform 0 :initarg :num-samples :accessor num-samples-of)
    (num-probes :initform 0 :initarg :num-probes :reader num-probes-of)
    (num-channels :initform 2 :initarg :num-channels :reader num-channels-of)
-   (format :initform 'single-float :initarg :format :reader format-of)))
+   (format :initform 'uint16 :initarg :format :reader format-of)))
 
 (defmethod initialize-instance :after ((sim sim) &key)
   (with-slots (stream version name-size num-samples num-probes
@@ -102,7 +102,15 @@
   (:method ((sim sim))
     (ecase (format-of sim)
       (single-float 4)
+      (uint16 2)
       (uint16-scaled 2))))
+
+(defgeneric intensity-type-of (file)
+  (:method ((sim sim))
+    (ecase (format-of sim)
+      (single-float 'single-float)
+      (uint16 'uint16)
+      (uint16-scaled 'uint16))))
 
 (defgeneric read-intensities (file &key start end)
   (:documentation "Read all of the intensities for the next sample
@@ -115,7 +123,14 @@
         sim
       (let* ((end (or end num-probes))
              (range (- end start))
-             (intensity-size (intensity-size-of sim)))
+             (intensity-type (intensity-type-of sim))
+             (intensity-size (intensity-size-of sim))
+             (default (ecase intensity-type
+                        (single-float 0.f0)
+                        (uint16 0)))
+             (decoder (ecase intensity-type
+                        (single-float #'decode-float32le)
+                        (uint16 #'decode-uint16le))))
         (check-arguments (<= start end num-probes) (start end num-probes)
                          "must satisfy start <= end <= number of probes (~d)"
                          num-probes)
@@ -124,8 +139,8 @@
               (buffer (make-array (* range num-channels intensity-size)
                                   :element-type 'octet :initial-element 0))
               (intensities (make-array (* range num-channels)
-                                       :element-type 'single-float
-                                       :initial-element 0.f0)))
+                                       :element-type intensity-type
+                                       :initial-element default)))
           (unless (= name-size (read-sequence name-buffer stream))
             (error 'malformed-record-error :record name-buffer
                    :format-control "failed to read sample name"))
@@ -144,7 +159,7 @@
             (loop
                for i from 0 below n by intensity-size
                for j = 0 then (1+ j)
-               do (setf (aref intensities j) (decode-float32le buffer i))))
+               do (setf (aref intensities j) (funcall decoder buffer i))))
           ;; Maybe seek to end of intensities
           (when (/= num-probes end)
             (unless (file-position stream
@@ -160,12 +175,14 @@
 (defun read-sim-format (stream buffer)
   (ecase (read-uint8 stream buffer)
     (0 'single-float)
-    (1 'uint16-scaled)))
+    (1 'uint16)
+    (2 'uint16-scaled)))
 
 (defun write-sim-format (format stream buffer)
   (write-uint8 (ecase format
                  (single-float 0)
-                 (uint16-scaled 1)) stream buffer))
+                 (uint16 1)
+                 (uint16-scaled 2)) stream buffer))
 
 (defun read-sim-header (stream buffer)
   (read-magic stream buffer *sim-magic*)
@@ -186,9 +203,46 @@
   (write-uint8 num-channels stream buffer)
   (write-sim-format format stream buffer))
 
-(defun write-2channel-intensities (snps x-intensities y-intensities
-                                   intensity-size xforms stream)
+(defun write-norm-2channel-intensities (snps x-intensities y-intensities
+                                        xforms stream)
   "Writes normalized intensity data for selected SNPs to STREAM.
+
+Arguments:
+
+- snps (simple-vector of snp): A vector of snp structs for those SNPs
+  whose data are to be written. The snp-index field supplies the index
+  into the intensity vectors for extraction of intensity values.
+- x-intensities (vector of uint16): The x channel intensities, some of
+  which will be written.
+- y-intensities (vector of uint16): The y channel intensities, some of
+  which will be written.
+- xforms (simple-vector of xform): The xform normalization structures.
+- stream (binary output stream): The output stream.
+
+Returns:
+
+- A fixnum (the number of bytes written)"
+  (declare (optimize (speed 3) (safety 1)))
+  (declare (type (simple-array snp (*)) snps)
+           (type (simple-array uint16 (*)) x-intensities y-intensities))
+  (let* ((intensity-size 4)
+         (pair-size 8)
+         (total-size (* pair-size (the snp-count (length snps)))))
+    (loop
+       with bindata = (make-array total-size :element-type 'octet)
+       for snp across snps
+       for j of-type fixnum from 0 by pair-size
+       for k of-type fixnum = (+ j intensity-size)
+       do (let ((m (1- (snp-index snp))))
+            (multiple-value-bind (xnorm ynorm)
+                (normalize (aref x-intensities m) (aref y-intensities m)
+                           (svref xforms (snp-norm-rank snp)))
+              (encode-float32le xnorm bindata j)
+              (encode-float32le ynorm bindata k)))
+       finally (return (write-sequence bindata stream)))))
+
+(defun write-raw-2channel-intensities (snps x-intensities y-intensities stream)
+    "Writes raw (unnormalized) intensity data for selected SNPs to STREAM.
 
 Arguments:
 
@@ -202,28 +256,22 @@ Arguments:
 - intensity-size (fixnum): The number of bytes occupied by each
   intensity value once encoded (used to calculate offsets into the output
   vector).
-- xforms (simple-vector of xform): The xform normalization structures.
 - stream (binary output stream): The output stream.
 
 Returns:
 
 - A fixnum (the number of bytes written)"
-  (declare (optimize (speed 3) (safety 1)))
-  (declare (type (simple-array snp (*)) snps)
-           (type (simple-array uint16 (*)) x-intensities y-intensities)
-           (type (integer 2 4) intensity-size))
-  (let* ((nbytes (* 2 intensity-size))
-         (total-size (* nbytes (the snp-count (length snps))))
-         (pair-size (* 2 intensity-size)))
-    (loop
-       with bindata = (make-array total-size :element-type 'octet)
-       for snp across snps
-       for j of-type fixnum from 0 by pair-size
-       for k of-type fixnum = (+ j intensity-size)
-       do (let ((m (1- (snp-index snp))))
-            (multiple-value-bind (xnorm ynorm)
-                (normalize (aref x-intensities m) (aref y-intensities m)
-                           (svref xforms (snp-norm-rank snp)))
-              (encode-float32le xnorm bindata j)
-              (encode-float32le ynorm bindata k)))
-       finally (return (write-sequence bindata stream)))))
+    (declare (type (simple-array snp (*)) snps)
+             (type (simple-array uint16 (*)) x-intensities y-intensities))
+    (let* ((intensity-size 2)
+           (pair-size 4)
+           (total-size (* pair-size (the snp-count (length snps)))))
+      (loop
+         with bindata = (make-array total-size :element-type 'octet)
+         for snp across snps
+         for j of-type fixnum from 0 by pair-size
+         for k of-type fixnum = (+ j intensity-size)
+         do (let ((m (1- (snp-index snp))))
+              (encode-uint16le (aref x-intensities m) bindata j)
+              (encode-uint16le (aref y-intensities m) bindata k))
+         finally (return (write-sequence bindata stream)))))
