@@ -108,10 +108,6 @@ designating a CLI class."
   (:documentation "sim-to-genosnp --input <filename> --output <filename>
 --manifest <filename>"))
 
-(define-cli bpm-to-genosnp-cli (cli output-mixin manifest-mixin)
-  ()
-  (:documentation "bpm-to-genosnp --output <filename> --manifest <filename>"))
-
 (define-cli mock-study-cli (cli manifest-mixin)
   ((study-name "study-name" :required-option t :value-type 'string
                :documentation "The name of the study, used in file naming.")
@@ -151,7 +147,8 @@ designating a CLI class."
                   (warn "No help was found for ~a~%" cmd)))
             (quit-lisp :status 3))
           (file-error (condition)
-            (errmsg condition))
+            (errmsg condition)
+            (quit-lisp :status 4))
           (error (condition)
             (errmsg condition)
             (write-line "Backtrace follows:" *error-output*)
@@ -240,14 +237,6 @@ designating a CLI class."
          (start (or (option-value 'start parsed-args) 0))
          (end (option-value 'end parsed-args)))
      (sim-to-genosnp output manifest input :start start :end end))))
-
-(register-command
- "bpm-to-genosnp" 'bpm-to-genosnp-cli
- (lambda (parsed-args &optional other)
-   (declare (ignorable other))
-   (let ((output (maybe-standard-stream (option-value 'output parsed-args)))
-         (manifest (load-bpm (option-value 'manifest parsed-args))))
-     (save-genosnp-snps output manifest))))
 
 (register-command
  "mock-study" 'mock-study-cli
