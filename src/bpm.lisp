@@ -168,10 +168,13 @@ with string values and key \"position\" with an integer value.")
        (loop
           with snps = (snps-of manifest :key key :test test)
           for snp across snps
-          collect (pairlis '(:name :chromosome :position)
+          collect (pairlis '(:name :chromosome :position
+                             :allele_a :allele_b :norm-id)
                            (list (snp-name snp)
                                  (encode-bim-chromosome (snp-chromosome snp))
-                                 (snp-position snp))) into specs
+                                 (snp-position snp)
+                                 (snp-allele-a snp) (snp-allele-b snp)
+                                 (snp-norm-id snp))) into specs
           finally (with-underscore-translation
                     (json:encode-json specs out)
                     (return specs))))))

@@ -35,38 +35,11 @@
               (when (subtypep (type-of s) 'file-stream)
                 (file-namestring s))))))
 
-(defgeneric save-genosnp-snps (filespec manifest)
-  (:documentation "Writes SNP annotation to FILESPEC in the format
-expected by GenoSNP. This is a separate method rather than being part
-of intensity format-shifting because it is typically done once for all
-samples; therefore it is not required most of the time. All SNPs in
-the manifest are written.")
-  (:method (filespec (manifest bpm))
-     (with-open-file (out filespec :direction :output :if-exists :supersede
-                          :if-does-not-exist :create)
-        (loop
-           for snp across (snps-of manifest)
-           do (write-genosnp-snp snp out)
-             (terpri out)))))
-
 (defun write-genosnp-sample (sample-name stream)
   (write-string sample-name stream)
   (write-char #\Tab stream)
   (write-string sample-name stream)
   (write-char #\Tab stream))
-
-(defun write-genosnp-snp (snp stream)
-  (write-string (snp-name snp) stream)
-  (write-char #\Tab stream)
-  ;; FIXME: The modulo 100 transform here is to emulate the existing
-  ;; software (g2i). However, I've no idea why this is applied. In
-  ;; fact, GenoSNP docs say that this value should be the BeadPool
-  ;; number instead.
-  (princ (1+ (mod (snp-norm-id snp) 100)) stream)
-  (write-char #\Tab stream)
-  (write-char (snp-allele-a snp) stream)
-  (write-char #\Space stream)
-  (write-char (snp-allele-b snp) stream))
 
 (defun write-genosnp-intensities (a b stream)
   (write-char #\Tab stream)
