@@ -33,5 +33,5 @@
 
 (sb-ext:save-lisp-and-die "genotype-call"
                           :executable t
-                          :save-runtime-options t
+                          :save-runtime-options nil
                           :toplevel #'genotype-call:cli)
