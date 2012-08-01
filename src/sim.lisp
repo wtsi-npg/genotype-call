@@ -112,6 +112,23 @@
       (uint16 'uint16)
       (uint16-scaled 'uint16))))
 
+(defgeneric skip-intensities (file &optional n)
+  (:documentation "Seek forward, skipping the records of N individuals.")
+  (:method ((sim sim) &optional (n 1))
+    (check-arguments (not (minusp n)) (n) "value may not be negative")
+    (if (zerop n)
+        n
+        (with-slots (stream name-size num-samples num-probes num-channels)
+            sim
+          (let ((start (file-position stream))
+                (offset (* n (+ name-size (* (intensity-size-of sim)
+                                             num-channels num-probes)))))
+            (unless (file-position stream (+ start offset))
+              (error 'malformed-file-error :file sim
+                     "failed to seek over intensity data from ~d to ~d"
+                     start offset))
+            offset)))))
+
 (defgeneric read-intensities (file &key start end)
   (:documentation "Read all of the intensities for the next sample
   from FILE, optionally restricting those returned by START and
@@ -170,7 +187,6 @@
                      "failed to seek to end of intensity data")))
           (values intensities (string-right-trim
                                '(#\Nul) (octets-to-string name-buffer))))))))
-
 
 (defun read-sim-format (stream buffer)
   (ecase (read-uint8 stream buffer)

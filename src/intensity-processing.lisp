@@ -178,6 +178,8 @@ Returns:
                        num-probes (length snps))
       (let ((stream (stream-of gsn))
             (*print-pretty* nil))
+        ;; Skip 0 or more samples
+        (skip-intensities sim start)
         ;; For each sample
         (loop
            for i from start below end
