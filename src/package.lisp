@@ -79,6 +79,7 @@
    #:num-probes-of
    #:num-channels-of
    #:format-of
+   #:skip-intensities
    #:read-intensities
 
    ;; BED

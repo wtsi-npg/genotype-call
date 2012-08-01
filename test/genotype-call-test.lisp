@@ -347,6 +347,26 @@
      (ensure-condition (invalid-argument-error)
        (read-intensities sim :start 0 :end -1))))
 
+(addtest (genotype-call-tests) skip-intensities/1
+  (with-tmp-pathname (tmp-sim :tmpdir (merge-pathnames "data") :type "sim")
+    (let ((gtc-files '("data/example_0000.gtc" "data/example_0001.gtc"
+                       "data/example_0002.gtc" "data/example_0003.gtc"
+                       "data/example_0004.gtc")))
+      (with-sim (sim tmp-sim :direction :output :if-exists :supersede
+                     :if-does-not-exist :create :format 'single-float)
+        (dolist (file gtc-files)
+          (with-gtc (gtc (merge-pathnames file))
+            (copy-intensities gtc sim *example-bpm* :normalize t)))))
+    (dolist (n '(0 1 2 3 4))
+      (let ((expected-name (format nil "example_000~d" n)))
+        (with-sim (sim tmp-sim)
+          (skip-intensities sim n)
+          (multiple-value-bind (intensities name)
+              (read-intensities sim)
+            (ensure (equal expected-name name)
+                    :report "expected ~a, but found ~a"
+                    :arguments (expected-name name))))))))
+
 (addtest (genotype-call-tests) copy-intensities/gtc/sim/1
   (handler-bind ((test-condition #'leave-tmp-pathname))
     (with-tmp-pathname (tmp :tmpdir (merge-pathnames "data") :type "sim")
@@ -465,6 +485,25 @@
             (ensure gsn))
           (ensure-lines-equal
            (merge-pathnames "data/example.raw.gsn") tmp-gsn))))))
+
+(addtest (genotype-call-tests) sim-to-genosnp/2
+  (handler-bind ((test-condition #'leave-tmp-pathname))
+    (with-tmp-pathname (tmp-sim :tmpdir (merge-pathnames "data") :type "sim")
+      (let ((gtc-files '("data/example_0000.gtc" "data/example_0001.gtc"
+                         "data/example_0002.gtc" "data/example_0003.gtc"
+                         "data/example_0004.gtc")))
+        (with-sim (sim tmp-sim :direction :output :if-exists :supersede
+                       :if-does-not-exist :create :format 'uint16)
+          (dolist (file gtc-files)
+            (with-gtc (gtc (merge-pathnames file))
+              (copy-intensities gtc sim *example-bpm* :normalize nil))))
+        (with-tmp-pathname (tmp-gsn :tmpdir (merge-pathnames "data")
+                                    :type "gsn")
+          (let ((gsn (sim-to-genosnp tmp-gsn *example-bpm* tmp-sim
+                                     :start 1 :end 4)))
+            (ensure gsn))
+          (ensure-lines-equal
+           (merge-pathnames "data/example.raw.skipped.gsn") tmp-gsn))))))
 
 (addtest (genotype-call-tests) gtc-to-bed/1
   (handler-bind ((test-condition #'leave-tmp-pathname))
