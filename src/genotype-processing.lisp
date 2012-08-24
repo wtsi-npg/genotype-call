@@ -95,7 +95,7 @@ corresponding FAM and BIM annotation files.")
                       (check-arguments
                        (string= prev-manifest-name manifest-name)
                        (spec)
-                       "manifest ~s does not match the expecte manifest ~s"
+                       "manifest ~s does not match the expected manifest ~s"
                        manifest-name prev-manifest-name))
                   (check-field (or (string= "" gtc-name)
                                    (string= (puri:urn-nss uri) gtc-name))
@@ -111,4 +111,3 @@ designator BED-FILESPEC."
                    (bed-filespec)
                    "not a BED filespec")
   (make-pathname :type type :defaults bed-filespec))
-

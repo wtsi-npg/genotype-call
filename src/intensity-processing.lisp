@@ -57,7 +57,7 @@ Returns:
     (let ((num-snps (length snps)))
       (if (zerop num-samples)
           (setf num-probes num-snps)
-          (check-arguments (= num-probes num-snps) (sim snps)
+          (check-arguments (= num-probes num-snps) (sim)
                            "SIM holds data for ~d SNPs, but found ~d"
                            num-probes num-snps)))))
 
@@ -124,7 +124,7 @@ Returns:
                        "expected a non-negative integer")
       (check-arguments (<= 0 start end) (start end)
                        "start and end must satisfy 0 <= start <= end")
-      (check-arguments (= num-probes (length snps)) (sim snps)
+      (check-arguments (= num-probes (length snps)) (sim)
                        "SIM holds data for ~d SNPS, but found ~d"
                        num-probes (length snps))
       (let ((sample-names (make-array num-samples))
@@ -251,8 +251,8 @@ chromsome boundaries (in terms of SNP columns)")
                                   :external-format :ascii
                                   :if-exists :supersede
                                   :if-does-not-exist :create)
-        (copy-intensities sim (make-instance 'iln :stream stream) manifest
-                          :key key :test test :start start :end end))))))
+            (copy-intensities sim (make-instance 'iln :stream stream) manifest
+                              :key key :test test :start start :end end))))))
 
 (defgeneric sim-to-genosnp (genosnp-filespec manifest sim-filespec
                             &key test key start end)
