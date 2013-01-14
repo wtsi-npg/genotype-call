@@ -19,6 +19,11 @@
 
 (in-package :uk.ac.sanger.genotype-call)
 
+;; Test data generated with:
+;;
+;; (generate-study "example" 5 "data/example.bpm.csv"
+;;  :x 1 :y 2 :basecall "GG" :genotype "AB" :score 10.f0)
+
 (defun generate-study (study-name study-size manifest-file
                        &key (x 1) (y 3) (genotype "AA") (basecall "AA")
                        (score 100.f0))
@@ -45,8 +50,10 @@
          into sample-meta
          do (write-gtc
              gtc-path (pathname-name manifest-file) sample-name
-             (make-array (* 2 j) :element-type 'uint16 :initial-element x)
-             (make-array (* 2 j) :element-type 'uint16 :initial-element y)
+             ;; Increment each intensity by 2 * i so that each GTC file gets
+             ;; different pairs of numbers
+             (make-array j :element-type 'uint16 :initial-element (+ x (* 2 i)))
+             (make-array j :element-type 'uint16 :initial-element (+ y (* 2 i)))
              (make-array j :initial-element genotype)
              (make-array j :initial-element basecall)
              (make-array j :initial-element score))
@@ -105,7 +112,7 @@
                      "intensity vectors must be the same length")
     (check-arguments (evenp nx) (x-intensities)
                      "there must be an even number of intensities")
-    (let ((num-snps (/ nx 2)))
+    (let ((num-snps nx))
       (check-arguments (= ng num-snps) (genotypes)
                        "expected ~d genotypes, but found ~d" num-snps ng)
       (check-arguments (= nb num-snps) (basecalls)

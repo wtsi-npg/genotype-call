@@ -152,7 +152,7 @@ designating a CLI class."
           (error (condition)
             (errmsg condition)
             (write-line "Backtrace follows:" *error-output*)
-            (error condition)))))))
+            (quit-lisp :status 5)))))))
 
 (register-command
  "gtc-to-sim" 'gtc-to-sim-cli
