@@ -230,8 +230,8 @@
     (ensure-condition (invalid-argument-error)
       (data-field-of gtc :invalid-field))
       
-    (ensure (= 20 (length (data-field-of gtc :x-intensities))))
-    (ensure (= 20 (length (data-field-of gtc :y-intensities))))
+    (ensure (= 10 (length (data-field-of gtc :x-intensities))))
+    (ensure (= 10 (length (data-field-of gtc :y-intensities))))
     (ensure (= 10 (length (data-field-of gtc :genotypes))))
     (ensure (= 10 (length (data-field-of gtc :basecalls))))
     (ensure (= 10 (length (data-field-of gtc :genotype-scores))))))
